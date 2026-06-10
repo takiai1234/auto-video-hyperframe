@@ -1,0 +1,19 @@
+{
+  "_note": "Cấu hình thật được lưu ở data/settings.json (đã .gitignore). Bạn có thể nhập trực tiếp trên giao diện, hoặc copy file này vào data/settings.json rồi điền key. TUYỆT ĐỐI KHÔNG commit data/settings.json.",
+  "vbee": {
+    "appId": "",
+    "token": "",
+    "baseUrl": "https://vbee.vn/api/v1",
+    "bitrate": 128,
+    "speedRate": "1.0",
+    "responseType": "indirect",
+    "callbackUrl": "https://localhost/callback",
+    "voices": [
+      { "code": "n_hanoi_male_queperson2_zero_shot_book_vc", "label": "Quế Person 2 (Nam)" }
+    ]
+  },
+  "openrouter": {
+    "apiKey": "",
+    "model": "openai/gpt-4o-mini"
+  }
+}

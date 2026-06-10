@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoVideo Hyperframe</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>🎬 AutoVideo <span class="dot">·</span> Hyperframe</h1>
+          <div class="sub">Nhập chủ đề / nội dung → video hình động + giọng đọc Vbee + nhạc nền.</div>
+        </div>
+        <div class="qstat">
+          <div class="badge-stat"><b id="q-running">0</b>đang chạy</div>
+          <div class="badge-stat"><b id="q-waiting">0</b>chờ</div>
+          <div class="badge-stat"><b id="q-conc">2</b>song song</div>
+        </div>
+      </header>
+
+      <div id="voice-warn" class="banner" style="display:none">
+        ⚠ Chưa có giọng nào. Hãy <b>cấu hình Vbee</b> ở phần "Cấu hình giọng" bên dưới.
+      </div>
+
+      <!-- API: OpenRouter (sinh nội dung) -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h3>Sinh nội dung tự động - OpenRouter (ChatGPT)</h3>
+        <div class="row-inline">
+          <input type="password" id="or-key" placeholder="OpenRouter API key (sk-or-… ; để trống nếu không đổi)" style="flex:2; min-width: 240px;" />
+          <input type="text" id="or-model" placeholder="openai/gpt-4o-mini" style="flex:1; min-width: 160px;" />
+          <button class="primary" id="btn-or-save">Lưu</button>
+          <button class="sm" id="btn-or-test">Test sinh nội dung</button>
+          <span id="or-status" class="hint" style="margin:0;"></span>
+        </div>
+        <div class="hint">Bật <b>"Tự sinh nội dung (AI)"</b> ở ô Thêm task rồi chỉ cần nhập <b>chủ đề</b> → AI viết kịch bản 2–3 phút. Giọng đọc <b>liền mạch không ngắt nghỉ</b>, các frame chỉ minh hoạ chạy song song.</div>
+      </div>
+
+      <!-- Hàng 1: Thêm task + Excel/Drive -->
+      <div class="grid">
+        <div class="card">
+          <h3>Thêm task</h3>
+          <label>Chủ đề</label>
+          <input type="text" id="f-topic" placeholder="VD: RAG là gì" />
+          <label>Nội dung <span style="color:var(--muted)">(để trống nếu bật "Tự sinh nội dung" - AI sẽ tự viết)</span></label>
+          <textarea id="f-content" placeholder="Bật AI: để trống (hoặc nhập dàn ý gợi ý). Tắt AI: dán nội dung, mỗi đoạn = 1 cảnh."></textarea>
+          <div class="row2">
+            <div>
+              <label>Giọng Vbee</label>
+              <select id="f-vref"></select>
+            </div>
+            <div>
+              <label>Tỷ lệ khung hình</label>
+              <select id="f-aspect">
+                <option value="16:9">16:9 (ngang)</option>
+                <option value="9:16">9:16 (dọc)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row2">
+            <div>
+              <label>Nhạc nền</label>
+              <select id="f-music"></select>
+            </div>
+            <div style="display:flex; flex-direction:column; justify-content:flex-end; gap:7px; padding-bottom: 4px;">
+              <label class="checkbox"><input type="checkbox" id="f-autogen" checked /> Tự sinh nội dung (AI)</label>
+              <label class="checkbox"><input type="checkbox" id="f-approved" checked /> Đã duyệt</label>
+            </div>
+          </div>
+          <button class="primary" id="btn-add" style="margin-top: 12px;">Thêm vào danh sách</button>
+        </div>
+
+        <div class="card">
+          <h3>Tải Excel / Google Sheet (.xlsx, .csv)</h3>
+          <div class="hint">3 cột: <b>Chủ đề</b> · <b>Nội dung</b> · <b>Duyệt</b>. Chỉ dòng Duyệt = "đã duyệt" mới chạy được.
+            <a href="/api/sample-xlsx">Tải file mẫu</a></div>
+          <div class="row-inline" style="margin-top: 10px;">
+            <input type="file" id="f-file" accept=".xlsx,.xls,.csv" style="flex:1; min-width: 180px;" />
+            <button id="btn-upload">Tải lên</button>
+          </div>
+          <div class="hint">Giọng/nhạc/tỷ lệ của các dòng nhập từ Excel sẽ lấy theo lựa chọn ở ô "Thêm task".</div>
+
+          <div class="divider"></div>
+          <h3>Kho nhạc Google Drive (tuỳ chọn)</h3>
+          <input type="text" id="d-url" placeholder="https://drive.google.com/drive/folders/XXXX" />
+          <div class="row2" style="margin-top: 8px;">
+            <input type="text" id="d-key" placeholder="Google Drive API key" />
+            <button id="btn-drive">Đồng bộ nhạc</button>
+          </div>
+
+          <div class="divider"></div>
+          <h3>Nhạc hiện có (bấm ✕ để xoá)</h3>
+          <div id="music-list" class="taglist"></div>
+        </div>
+      </div>
+
+      <!-- Hàng 2: Cấu hình giọng Vbee -->
+      <div class="card" style="margin-bottom: 18px;">
+        <h3>Giọng đọc - Vbee (API)</h3>
+        <div class="row2">
+          <div><label>App ID</label><input type="text" id="vb-app" placeholder="app_id" /></div>
+          <div><label>Access Token</label><input type="password" id="vb-token" placeholder="để trống nếu không đổi" /></div>
+        </div>
+        <label>Base URL (mặc định)</label>
+        <input type="text" id="vb-base" placeholder="https://vbee.vn/api/v1" />
+        <div class="row-inline" style="margin-top: 10px;">
+          <button class="primary" id="btn-vb-save">Lưu cấu hình</button>
+          <span id="vb-status" class="hint" style="margin:0;"></span>
+        </div>
+
+        <div class="divider"></div>
+        <label>Danh sách giọng Vbee (voice_code → tên hiển thị)</label>
+        <div id="vb-voices" class="taglist"></div>
+        <div class="row-inline" style="margin-top: 8px;">
+          <input type="text" id="vb-new-code" placeholder="voice_code (vd hn_male_..._48k-fhg)" style="flex:2; min-width:160px;" />
+          <input type="text" id="vb-new-label" placeholder="tên hiển thị" style="flex:1; min-width:120px;" />
+          <button class="sm" id="btn-vb-addvoice">＋</button>
+        </div>
+        <div class="row-inline" style="margin-top: 10px;">
+          <select id="vb-test-voice" style="flex:1;"></select>
+          <button class="sm" id="btn-vb-test">Test giọng Vbee</button>
+        </div>
+        <div class="hint">Lấy <b>voice_code</b> chính xác trong dashboard Vbee của bạn. Endpoint có thể chỉnh ở Base URL nếu gói của bạn khác.</div>
+      </div>
+
+      <!-- Thanh điều khiển hàng loạt -->
+      <div class="toolbar">
+        <div class="left">
+          <span style="color: var(--muted); font-size: 12px;">Áp dụng cho tất cả:</span>
+          <select id="bulk-vref"><option value="">- Giọng -</option></select>
+          <select id="bulk-aspect"><option value="">- Tỷ lệ -</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select>
+          <select id="bulk-music"><option value="">- Nhạc -</option></select>
+          <label class="checkbox"><input type="checkbox" id="bulk-approved-only" /> chỉ task đã duyệt</label>
+          <button class="sm" id="btn-bulk">Áp dụng</button>
+        </div>
+        <div class="right">
+          <button class="ghost danger sm" id="btn-clear">Xoá tất cả</button>
+          <button class="amber" id="btn-runall">▶ Chạy tất cả đã duyệt</button>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Chủ đề</th>
+              <th>Nội dung</th>
+              <th>Duyệt</th>
+              <th>Giọng</th>
+              <th>Tỷ lệ</th>
+              <th>Nhạc</th>
+              <th>Trạng thái</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+    <div class="modal" id="modal">
+      <div class="box">
+        <div class="mhead">
+          <b id="modal-title">Xem video</b>
+          <button class="sm ghost" id="modal-close">Đóng ✕</button>
+        </div>
+        <video id="modal-video" controls></video>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

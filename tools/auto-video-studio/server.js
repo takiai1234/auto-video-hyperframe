@@ -6,9 +6,21 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { listMusic, syncFromDrive, parseDriveFolderId, removeMusic } from "./src/music.js";
-import { publicVbee, setVbeeConfig, setVbeeVoices, publicOpenrouter, setOpenrouterConfig } from "./src/settings.js";
+import {
+  publicVbee,
+  setVbeeConfig,
+  setVbeeVoices,
+  publicOpenrouter,
+  setOpenrouterConfig,
+  publicPrompts,
+  setPromptsConfig,
+  resetPromptsConfig,
+  publicHeygen,
+  setHeygenConfig,
+} from "./src/settings.js";
 import { testVbee } from "./src/vbee.js";
 import { testOpenrouter } from "./src/openrouter.js";
+import { testHeygen } from "./src/heygen.js";
 import {
   events,
   listTasks,
@@ -35,6 +47,8 @@ app.get("/api/meta", (req, res) => {
   res.json({
     vbee: publicVbee(),
     openrouter: publicOpenrouter(),
+    prompts: publicPrompts(),
+    heygen: publicHeygen(),
     music: listMusic(),
     queue: queueStats(),
   });
@@ -44,7 +58,11 @@ app.get("/api/tasks", (req, res) => res.json({ tasks: listTasks(), queue: queueS
 
 // ---- SSE realtime ----
 app.get("/api/events", (req, res) => {
-  res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
   res.flushHeaders?.();
   const send = (tasks) => res.write(`data: ${JSON.stringify({ tasks, queue: queueStats() })}\n\n`);
   send(listTasks());
@@ -59,9 +77,9 @@ app.get("/api/events", (req, res) => {
 
 // ---- Tạo / sửa / xoá task ----
 app.post("/api/tasks", (req, res) => {
-  const { topic, content, approved, voiceRef, music, autogen, aspectRatio } = req.body || {};
+  const { topic, content, approved, voiceRef, music, autogen, aspectRatio, mode } = req.body || {};
   if (!topic && !content) return res.status(400).json({ error: "Cần chủ đề hoặc nội dung." });
-  const t = addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio });
+  const t = addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode });
   res.json({ task: t });
 });
 
@@ -69,7 +87,7 @@ app.patch("/api/tasks/:id", (req, res) => {
   const t = getTask(req.params.id);
   if (!t) return res.status(404).json({ error: "Không tìm thấy task." });
   const allowed = {};
-  for (const k of ["topic", "content", "voiceRef", "music", "aspectRatio"]) {
+  for (const k of ["topic", "content", "voiceRef", "music", "aspectRatio", "mode"]) {
     if (k in (req.body || {})) allowed[k] = req.body[k];
   }
   if ("approved" in (req.body || {})) allowed.approved = req.body.approved === true;
@@ -165,6 +183,40 @@ app.post("/api/openrouter/test", async (req, res) => {
   }
 });
 
+// ---- Prompt AI (sửa được, khôi phục được) ----
+app.get("/api/settings/prompts", (req, res) => res.json({ prompts: publicPrompts() }));
+
+app.post("/api/settings/prompts", (req, res) => {
+  const { system, userTemplate } = req.body || {};
+  setPromptsConfig({ system, userTemplate });
+  res.json({ prompts: publicPrompts() });
+});
+
+app.post("/api/settings/prompts/reset", (req, res) => {
+  resetPromptsConfig();
+  res.json({ prompts: publicPrompts() });
+});
+
+// ---- Cấu hình HeyGen (chế độ ghép avatar) ----
+app.post("/api/settings/heygen", (req, res) => {
+  const { apiKey, avatarId, background } = req.body || {};
+  const patch = {};
+  if (apiKey !== undefined && apiKey !== "") patch.apiKey = apiKey.trim();
+  if (avatarId !== undefined) patch.avatarId = String(avatarId).trim();
+  if (background) patch.background = String(background).trim();
+  setHeygenConfig(patch);
+  res.json({ heygen: publicHeygen() });
+});
+
+app.post("/api/heygen/test", async (req, res) => {
+  try {
+    const r = await testHeygen();
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message || err) });
+  }
+});
+
 // ---- Upload Excel/CSV ----
 app.post("/api/upload", upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Chưa có file." });
@@ -184,6 +236,7 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
           voiceRef: req.body.voiceRef || "",
           music: req.body.music || "random",
           aspectRatio: req.body.aspectRatio || "16:9",
+          mode: req.body.mode || "hyperframe",
         }),
       );
     }
@@ -239,8 +292,17 @@ app.get("/api/video/:id", (req, res) => {
 // ---- Tải file Excel mẫu ----
 app.get("/api/sample-xlsx", (req, res) => {
   const data = [
-    { "Chủ đề": "RAG là gì", "Nội dung": "RAG giúp LLM trả lời bằng dữ liệu thật.\n\nGồm 2 giai đoạn: Indexing và Retrieval.\n\nLợi ích: chính xác, có dẫn nguồn.", "Duyệt": "đã duyệt" },
-    { "Chủ đề": "Vector Database", "Nội dung": "Lưu dữ liệu dưới dạng vector.\n\nTìm kiếm theo độ tương đồng ngữ nghĩa.", "Duyệt": "chưa duyệt" },
+    {
+      "Chủ đề": "RAG là gì",
+      "Nội dung":
+        "RAG giúp LLM trả lời bằng dữ liệu thật.\n\nGồm 2 giai đoạn: Indexing và Retrieval.\n\nLợi ích: chính xác, có dẫn nguồn.",
+      Duyệt: "đã duyệt",
+    },
+    {
+      "Chủ đề": "Vector Database",
+      "Nội dung": "Lưu dữ liệu dưới dạng vector.\n\nTìm kiếm theo độ tương đồng ngữ nghĩa.",
+      Duyệt: "chưa duyệt",
+    },
   ];
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();

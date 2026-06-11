@@ -24,15 +24,7 @@ export function getTask(id) {
   return tasks.get(id);
 }
 
-export function addTask({
-  topic,
-  content,
-  approved,
-  voiceRef,
-  music,
-  autogen,
-  aspectRatio,
-}) {
+export function addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode }) {
   const id = String(++seq);
   const c = (content || "").trim();
   const t = {
@@ -44,6 +36,7 @@ export function addTask({
     voiceRef: voiceRef || "",
     music: music || "random",
     aspectRatio: aspectRatio || "16:9",
+    mode: mode === "heygen" ? "heygen" : "hyperframe", // hyperframe | heygen (ghép avatar)
     status: "idle", // idle | queued | running | done | error
     phase: "",
     percent: 0,
@@ -148,6 +141,7 @@ async function runTask(t) {
         voiceRef: t.voiceRef,
         music: t.music,
         aspectRatio: t.aspectRatio,
+        mode: t.mode,
       },
       (p) => updateTask(t.id, { phase: p.phase, percent: p.percent, detail: p.detail || "" }),
     );

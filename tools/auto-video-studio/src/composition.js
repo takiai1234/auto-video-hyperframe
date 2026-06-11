@@ -269,7 +269,15 @@ function sceneEntrances(s, i, start) {
   return L;
 }
 
-export function buildComposition({ id, scenes, starts, total, aspectRatio = "16:9" }) {
+export function buildComposition({
+  id,
+  scenes,
+  starts,
+  total,
+  aspectRatio = "16:9",
+  captureWidth,
+  captureHeight,
+}) {
   const TOTAL = Number(total.toFixed(3));
   const sectionsHtml = scenes.map((s, i) => sceneHtml(s, i)).join("\n");
 
@@ -294,8 +302,15 @@ export function buildComposition({ id, scenes, starts, total, aspectRatio = "16:
   );
 
   const isPortrait = aspectRatio === "9:16";
+  // Kích thước "canvas thiết kế" (mọi px trong CSS được tinh chỉnh theo cỡ này).
   const width = isPortrait ? 1080 : 1920;
   const height = isPortrait ? 1920 : 1080;
+  // Kích thước khung CHỤP thật. Mặc định = canvas thiết kế (không đổi gì so với trước).
+  // Khi ghép HeyGen, Hyperframe chỉ chiếm một nửa khung -> truyền captureWidth/Height của nửa đó,
+  // canvas thiết kế được thu nhỏ kiểu "contain" (giữ trọn nội dung, viền tối hoà với nền).
+  const capW = Math.round(captureWidth || width);
+  const capH = Math.round(captureHeight || height);
+  const scale = Math.min(capW / width, capH / height);
   const glowLeft = isPortrait ? "-10px" : "410px";
   const glowTop = isPortrait ? "410px" : "-120px";
   const bgSize = isPortrait ? "600px 900px" : "900px 600px";
@@ -310,9 +325,12 @@ export function buildComposition({ id, scenes, starts, total, aspectRatio = "16:
         --bg:#03070f; --panel:#0d1b2a; --panel2:#122236; --line:#2a3f5a; --muted:#aebfd2;
         --text:#eef3f9; --amber:#ffc300; --teal:#2ec4b6; --violet:#9b8cff; --red:#ff5a6a;
       }
-      html,body{margin:0;padding:0;width:${width}px;height:${height}px;background:var(--bg);overflow:hidden;
+      html,body{margin:0;padding:0;width:${capW}px;height:${capH}px;background:var(--bg);overflow:hidden;
         font-family:"Inter","Segoe UI",system-ui,sans-serif;color:var(--text);}
-      #stage{position:relative;width:${width}px;height:${height}px;overflow:hidden;
+      /* Khung chụp thật (nền tối để viền letterbox hoà liền khi thu nhỏ canvas). */
+      #frame{position:relative;width:${capW}px;height:${capH}px;overflow:hidden;background:var(--bg);}
+      #stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(${scale.toFixed(5)});
+        transform-origin:center center;width:${width}px;height:${height}px;overflow:hidden;
         background:radial-gradient(${bgSize} at 50% 36%,rgba(20,60,110,0.35),transparent 70%),
           radial-gradient(circle at center,rgba(255,255,255,0.06) 1px,transparent 1px) 0 0/46px 46px,var(--bg);}
       #bg-glow{position:absolute;width:1100px;height:1100px;left:${glowLeft};top:${glowTop};border-radius:50%;
@@ -443,7 +461,8 @@ export function buildComposition({ id, scenes, starts, total, aspectRatio = "16:
     </style>
   </head>
   <body>
-    <div id="stage" class="${isPortrait ? "portrait" : ""}" data-composition-id="${esc(id)}" data-width="${width}" data-height="${height}" data-start="0" data-duration="${TOTAL}">
+    <div id="frame" data-composition-id="${esc(id)}" data-width="${capW}" data-height="${capH}" data-start="0" data-duration="${TOTAL}">
+    <div id="stage" class="${isPortrait ? "portrait" : ""}">
       <div id="bg-glow"></div>
 ${sectionsHtml}
 
@@ -464,6 +483,7 @@ ${sectionsHtml}
           window.__timelines["${esc(id)}"] = tl;
         })();
       </script>
+    </div>
     </div>
   </body>
 </html>

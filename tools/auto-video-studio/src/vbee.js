@@ -42,7 +42,10 @@ export async function synthesizeVbee(text, voiceCode, outPath, cfgOverride) {
   let audioUrl = extractAudioUrl(data);
   if (!audioUrl) {
     const requestId =
-      data?.result?.request_id || data?.result?.requestId || data?.request_id || data?.data?.request_id ||
+      data?.result?.request_id ||
+      data?.result?.requestId ||
+      data?.request_id ||
+      data?.data?.request_id ||
       (typeof data?.result === "string" ? data.result : null);
     if (!requestId) throw new Error(`Vbee không trả request_id/url_voice: ${brief(data)}`);
     // 2) Poll lấy url_voice
@@ -54,15 +57,22 @@ export async function synthesizeVbee(text, voiceCode, outPath, cfgOverride) {
   if (!ar.ok) throw new Error(`Tải audio Vbee lỗi ${ar.status}`);
   fs.writeFileSync(outPath, Buffer.from(await ar.arrayBuffer()));
   if (fs.statSync(outPath).size < 200) throw new Error("File audio Vbee rỗng.");
-  return outPath;
+  // Trả cả đường dẫn file lẫn URL công khai (HeyGen cần URL audio công khai).
+  return { outPath, audioUrl };
 }
 
 // Lấy link audio từ response (nhiều biến thể field).
 function extractAudioUrl(d) {
   const r = d?.result || d?.data || {};
   return (
-    r.url_voice || r.audio_link || r.audioLink || r.audio_url || r.url ||
-    d?.url_voice || d?.audio_link || null
+    r.url_voice ||
+    r.audio_link ||
+    r.audioLink ||
+    r.audio_url ||
+    r.url ||
+    d?.url_voice ||
+    d?.audio_link ||
+    null
   );
 }
 
@@ -89,7 +99,9 @@ export async function testVbee(voiceCode) {
   const t0 = Date.now();
   await synthesizeVbee("Xin chào, đây là bài kiểm tra giọng Vbee.", voiceCode, tmp);
   const size = fs.statSync(tmp).size;
-  try { fs.rmSync(tmp, { force: true }); } catch {}
+  try {
+    fs.rmSync(tmp, { force: true });
+  } catch {}
   return { ok: true, ms: Date.now() - t0, size };
 }
 

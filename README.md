@@ -16,8 +16,9 @@ Công cụ được xây trên nền **HyperFrames** - engine mã nguồn mở b
 
 ## ✨ Tính năng
 
-- **Sinh nội dung bằng AI (OpenRouter / ChatGPT)** - chỉ cần nhập chủ đề, AI viết kịch bản phân cảnh 90–180 giây.
+- **Sinh nội dung bằng AI (OpenRouter / ChatGPT)** - chỉ cần nhập chủ đề, AI viết kịch bản phân cảnh 90–180 giây. **Prompt sửa được ngay trên giao diện** (SYSTEM + template, có khôi phục mặc định).
 - **Hình ảnh đa dạng** - 10 kiểu layout (title, thẻ, công thức, sơ đồ luồng, so sánh, số liệu, các bước, tóm tắt…), chuyển cảnh mượt.
+- **Hai chế độ** - chỉ slide Hyperframe, hoặc **ghép thêm avatar HeyGen nói** chia đôi khung (9:16 trên/dưới · 16:9 trái/phải), giọng vẫn dùng Vbee.
 - **Giọng đọc tiếng Việt liền mạch** qua **Vbee API** (không ngắt nghỉ; cắt im lặng tự động).
 - **Nhạc nền tự động** - chọn ngẫu nhiên từ kho local hoặc đồng bộ từ **Google Drive**.
 - **Khung hình 16:9 hoặc 9:16** (dọc cho TikTok/Reels/Shorts).

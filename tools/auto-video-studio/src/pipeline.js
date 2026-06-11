@@ -6,10 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { generateScenes, scenesFromPlan } from "./scriptgen.js";
 import { buildComposition } from "./composition.js";
-import { synthesize, audioDuration } from "./voices.js";
+import { synthesize, synthesizeWithUrl, audioDuration } from "./voices.js";
 import { resolveMusic } from "./music.js";
 import { getVbeeConfig } from "./settings.js";
 import { generateScript } from "./openrouter.js";
+import { generateHeygenVideo } from "./heygen.js";
 
 function resolveVoiceLabel(ref) {
   const v = getVbeeConfig().voices.find((x) => x.code === ref);
@@ -99,15 +100,20 @@ export async function produceVideo(task, progress = () => {}) {
   const voiceLabel = resolveVoiceLabel(task.voiceRef);
 
   // 1) Sinh kịch bản - AI (OpenRouter) hoặc từ nội dung có sẵn
-  const autogen = typeof task.autogen === "boolean" ? task.autogen : !task.content;
-  let scenes;
-  if (autogen) {
-    progress({ phase: "Sinh nội dung (AI)", percent: 3 });
-    const script = await generateScript(task.topic, { guidance: task.content });
-    scenes = scenesFromPlan({ topic: task.topic, title: script.title, scenes: script.scenes });
-  } else {
-    progress({ phase: "Soạn kịch bản", percent: 4 });
-    scenes = generateScenes({ topic: task.topic, content: task.content });
+  const scenes = await buildScenes(task, progress);
+
+  // Chế độ ghép HeyGen (avatar nói cùng slide) đi nhánh riêng.
+  if (task.mode === "heygen") {
+    return await produceHeygenComposite({
+      task,
+      dir,
+      audioDir,
+      rendersDir,
+      scenes,
+      voiceSpec,
+      voiceLabel,
+      progress,
+    });
   }
 
   // 2) TTS từng scene + đo thời lượng
@@ -204,6 +210,218 @@ export async function produceVideo(task, progress = () => {}) {
     voice: voiceLabel,
     music: musicTrack ? musicTrack.name : "(không có nhạc)",
   };
+}
+
+// Sinh danh sách scene từ task (AI hoặc nội dung có sẵn) - dùng chung 2 chế độ.
+async function buildScenes(task, progress) {
+  const autogen = typeof task.autogen === "boolean" ? task.autogen : !task.content;
+  if (autogen) {
+    progress({ phase: "Sinh nội dung (AI)", percent: 3 });
+    const script = await generateScript(task.topic, { guidance: task.content });
+    return scenesFromPlan({ topic: task.topic, title: script.title, scenes: script.scenes });
+  }
+  progress({ phase: "Soạn kịch bản", percent: 4 });
+  return generateScenes({ topic: task.topic, content: task.content });
+}
+
+// Hình học chia đôi khung cho chế độ HeyGen.
+//  - 9:16 (1080x1920): trên = Hyperframe, dưới = HeyGen.
+//  - 16:9 (1920x1080): trái = HeyGen, phải = Hyperframe.
+function splitLayout(aspectRatio) {
+  if (aspectRatio === "9:16") {
+    return {
+      final: { w: 1080, h: 1920 },
+      hf: { x: 0, y: 0, w: 1080, h: 960, design: "16:9" }, // nửa trên (ngang)
+      hg: { x: 0, y: 960, w: 1080, h: 960 }, // nửa dưới
+    };
+  }
+  return {
+    final: { w: 1920, h: 1080 },
+    hg: { x: 0, y: 0, w: 960, h: 1080 }, // trái
+    hf: { x: 960, y: 0, w: 960, h: 1080, design: "9:16" }, // phải (dọc)
+  };
+}
+
+// Chế độ HeyGen: Vbee đọc TOÀN BỘ narration 1 lần -> URL công khai cho HeyGen + audio cuối.
+// Hyperframe render vào đúng nửa khung; HeyGen dựng song song; ffmpeg ghép lại.
+async function produceHeygenComposite({
+  task,
+  dir,
+  audioDir,
+  rendersDir,
+  scenes,
+  voiceSpec,
+  voiceLabel,
+  progress,
+}) {
+  const id = task.id;
+  const aspectRatio = task.aspectRatio === "9:16" ? "9:16" : "16:9";
+  const geo = splitLayout(aspectRatio);
+
+  // 2) Vbee đọc cả bài (1 lần) -> file + URL công khai.
+  progress({ phase: "Tạo giọng đọc (cả bài)", percent: 10 });
+  const fullText = scenes
+    .map((s) => s.narration)
+    .filter(Boolean)
+    .join(" ");
+  const fullBase = path.join(audioDir, "full");
+  const { path: fullAudio, url: audioUrl } = await synthesizeWithUrl(fullText, voiceSpec, fullBase);
+  if (!audioUrl) throw new Error("Vbee không trả URL audio công khai (HeyGen cần URL này).");
+  const total = await audioDuration(fullAudio);
+  if (!(total > 0)) throw new Error("Không đo được thời lượng audio.");
+
+  // 3) Mốc thời gian cho slide: chia theo tỷ lệ độ dài chữ từng cảnh (frame minh hoạ).
+  const weights = scenes.map((s) => Math.max(1, String(s.narration || "").length));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const starts = [];
+  let acc = 0;
+  for (let i = 0; i < scenes.length; i++) {
+    starts[i] = (acc / sum) * total;
+    acc += weights[i];
+  }
+
+  // 4) Dựng composition Hyperframe cho NỬA khung + ghi index.html.
+  progress({ phase: "Dựng composition", percent: 30 });
+  const html = buildComposition({
+    id: `vid${id}`,
+    scenes,
+    starts,
+    total,
+    aspectRatio: geo.hf.design,
+    captureWidth: geo.hf.w,
+    captureHeight: geo.hf.h,
+  });
+  fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
+
+  // 5) Chạy SONG SONG: render slide (im lặng) + HeyGen dựng avatar nói.
+  const silentMp4 = path.join(rendersDir, "silent.mp4");
+  const heygenMp4 = path.join(rendersDir, "heygen.mp4");
+  const workers = process.env.HF_WORKERS || "2";
+
+  const renderHF = run(
+    HF_BIN,
+    [...HF_ARGS_PREFIX, "render", ".", "--output", "renders/silent.mp4", "--workers", workers],
+    {
+      cwd: dir,
+      shell: process.platform === "win32",
+      onLine: (l) => {
+        const m = l.match(/Capturing frame (\d+)\/(\d+)/);
+        if (m) {
+          const frac = Number(m[1]) / Number(m[2]);
+          progress({
+            phase: "Render slide",
+            percent: 35 + Math.round(frac * 30),
+            detail: `${m[1]}/${m[2]} frame`,
+          });
+        }
+      },
+    },
+  );
+
+  const renderHeygen = generateHeygenVideo({
+    audioUrl,
+    width: geo.hg.w,
+    height: geo.hg.h,
+    outPath: heygenMp4,
+    onProgress: (p) =>
+      progress({ phase: "Dựng avatar HeyGen", percent: 50, detail: p.detail || "" }),
+  });
+
+  const [, heygenInfo] = await Promise.all([renderHF, renderHeygen]);
+  if (!fs.existsSync(silentMp4)) throw new Error("Render slide không tạo ra file video.");
+  if (!fs.existsSync(heygenMp4)) throw new Error("HeyGen không tạo ra file video.");
+
+  // 6) Ghép 2 nửa + giọng + nhạc nền (duck).
+  progress({ phase: "Ghép khung + nhạc", percent: 88 });
+  const musicTrack = resolveMusic(task.music);
+  const finalPath = path.join(OUTPUT, `task-${id}.mp4`);
+  await compositeHeygen({
+    silentMp4,
+    heygenMp4,
+    narrationAudio: fullAudio,
+    musicPath: musicTrack?.path,
+    total,
+    geo,
+    outPath: finalPath,
+  });
+
+  progress({ phase: "Hoàn tất", percent: 100 });
+  return {
+    videoPath: finalPath,
+    duration: Number(total.toFixed(2)),
+    scenes: scenes.length,
+    voice: voiceLabel,
+    music: musicTrack ? musicTrack.name : "(không có nhạc)",
+    mode: "heygen",
+    avatar: heygenInfo?.avatarId || "",
+  };
+}
+
+// Ghép: nền tối + slide (nửa này) + avatar HeyGen (nửa kia, scale-cover) + audio (giọng + nhạc duck).
+async function compositeHeygen({
+  silentMp4,
+  heygenMp4,
+  narrationAudio,
+  musicPath,
+  total,
+  geo,
+  outPath,
+}) {
+  const T = total.toFixed(3);
+  const { final: F, hf, hg } = geo;
+  const hasMusic = musicPath && fs.existsSync(musicPath);
+
+  // Video: dựng canvas nền tối -> overlay slide (đúng cỡ) -> overlay avatar (cover + crop).
+  const vparts = [
+    `color=c=0x03070f:s=${F.w}x${F.h}:r=30:d=${T}[bg]`,
+    `[0:v]fps=30,scale=${hf.w}:${hf.h},setsar=1[hf]`,
+    `[1:v]fps=30,scale=${hg.w}:${hg.h}:force_original_aspect_ratio=increase,crop=${hg.w}:${hg.h},setsar=1[hg]`,
+    `[bg][hf]overlay=${hf.x}:${hf.y}:eof_action=pass[t1]`,
+    `[t1][hg]overlay=${hg.x}:${hg.y}:eof_action=pass,format=yuv420p[v]`,
+  ];
+
+  // Audio: giọng (input 2) + nhạc nền (input 3) sidechain ducking.
+  let aparts;
+  if (hasMusic) {
+    aparts = [
+      `[2:a]aresample=44100,apad,atrim=0:${T},asetpts=PTS-STARTPTS,asplit=2[voiceA][voiceB]`,
+      `[3:a]aresample=44100,volume=0.18,apad,atrim=0:${T},asetpts=PTS-STARTPTS[bgm]`,
+      `[bgm][voiceB]sidechaincompress=threshold=0.025:ratio=7:attack=15:release=350[bgduck]`,
+      `[voiceA][bgduck]amix=inputs=2:normalize=0:dropout_transition=0[a]`,
+    ];
+  } else {
+    aparts = [`[2:a]aresample=44100,apad,atrim=0:${T},asetpts=PTS-STARTPTS[a]`];
+  }
+
+  const inputs = ["-i", silentMp4, "-i", heygenMp4, "-i", narrationAudio];
+  if (hasMusic) inputs.push("-stream_loop", "-1", "-i", musicPath);
+
+  await ffmpeg([
+    ...inputs,
+    "-filter_complex",
+    [...vparts, ...aparts].join(";"),
+    "-map",
+    "[v]",
+    "-map",
+    "[a]",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    "-t",
+    T,
+    outPath,
+  ]);
 }
 
 async function buildNarration(scenePaths, narrStarts, total, outPath) {

@@ -1,4 +1,10 @@
-let META = { vbee: { voices: [], configured: false }, openrouter: { configured: false }, music: [] };
+let META = {
+  vbee: { voices: [], configured: false },
+  openrouter: { configured: false },
+  prompts: { system: "", userTemplate: "", isDefault: true },
+  heygen: { configured: false, avatarId: "" },
+  music: [],
+};
 let TASKS = [];
 
 const $ = (id) => document.getElementById(id);
@@ -23,7 +29,10 @@ async function api(method, url, body, isForm = false) {
 }
 
 function esc(s) {
-  return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s || "").replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+  );
 }
 
 // ---------- Option builders ----------
@@ -32,25 +41,34 @@ function refOptions(selected) {
   if (!list.length) {
     return `<option value="">(thêm giọng Vbee)</option>`;
   }
-  return list.map((o) => `<option value="${esc(o.value)}" ${o.value === selected ? "selected" : ""}>${esc(o.label)}</option>`).join("");
-}
-function firstRef() {
-  const list = META.vbee.voices;
-  return list.length ? list[0].code : "";
+  return list
+    .map(
+      (o) =>
+        `<option value="${esc(o.value)}" ${o.value === selected ? "selected" : ""}>${esc(o.label)}</option>`,
+    )
+    .join("");
 }
 function musicOptions(selected) {
   const sel = selected || "random";
   let html = `<option value="random" ${sel === "random" ? "selected" : ""}>🎲 Ngẫu nhiên</option>`;
-  html += META.music.map((m) => `<option value="${m.id}" ${m.id === sel ? "selected" : ""}>${esc(m.name)}</option>`).join("");
+  html += META.music
+    .map((m) => `<option value="${m.id}" ${m.id === sel ? "selected" : ""}>${esc(m.name)}</option>`)
+    .join("");
   return html;
 }
 
-const STATUS_LABEL = { idle: "Sẵn sàng", queued: "Trong hàng đợi", running: "Đang chạy", done: "Hoàn tất", error: "Lỗi" };
+const STATUS_LABEL = {
+  idle: "Sẵn sàng",
+  queued: "Trong hàng đợi",
+  running: "Đang chạy",
+  done: "Hoàn tất",
+  error: "Lỗi",
+};
 
 function renderTasks() {
   const tb = $("rows");
   if (!TASKS.length) {
-    tb.innerHTML = `<tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>`;
     return;
   }
   tb.innerHTML = TASKS.map((t, i) => {
@@ -58,11 +76,11 @@ function renderTasks() {
     const canRun = t.approved && !busy;
     const phase = t.status === "error" ? t.error : t.phase || STATUS_LABEL[t.status];
     const detail = t.detail ? `<span class="detail">${esc(t.detail)}</span>` : "";
+    const heygen = t.mode === "heygen";
     const resultInfo =
       t.status === "done" && t.result
-        ? `<div class="hint" style="margin-top:4px;">⏱ ${t.result.duration}s · ${t.result.scenes} cảnh · ${esc(t.result.voice)} · ${esc(t.result.music)}</div>`
+        ? `<div class="hint" style="margin-top:4px;">⏱ ${t.result.duration}s · ${t.result.scenes} cảnh · ${esc(t.result.voice)} · ${esc(t.result.music)}${t.result.avatar ? ` · 🧑 ${esc(t.result.avatar)}` : ""}</div>`
         : "";
-    const aspectLabel = t.aspectRatio === "9:16" ? "9:16" : "16:9";
     return `<tr class="st-${t.status}" data-id="${t.id}">
       <td class="idx">${i + 1}</td>
       <td class="topic">${esc(t.topic) || "<i style='color:var(--muted)'>(không tên)</i>"}</td>
@@ -71,6 +89,10 @@ function renderTasks() {
         <div class="content-cell">${esc(t.content) || (t.autogen ? "<i>AI sẽ viết từ chủ đề</i>" : "<i>-</i>")}</div>
       </td>
       <td><span class="pill ${t.approved ? "ok" : "no"}" data-act="toggle" title="Bấm để đổi">${t.approved ? "đã duyệt" : "chưa duyệt"}</span></td>
+      <td><select data-act="mode" ${busy ? "disabled" : ""}>
+        <option value="hyperframe" ${!heygen ? "selected" : ""}>Hyperframe</option>
+        <option value="heygen" ${heygen ? "selected" : ""}>+ HeyGen</option>
+      </select></td>
       <td><select data-act="vref" ${busy ? "disabled" : ""}>${refOptions(t.voiceRef)}</select></td>
       <td><select data-act="aspect" ${busy ? "disabled" : ""}>
         <option value="16:9" ${t.aspectRatio !== "9:16" ? "selected" : ""}>16:9</option>
@@ -101,8 +123,10 @@ $("rows").addEventListener("click", async (e) => {
   try {
     if (act === "toggle") await api("PATCH", `/api/tasks/${id}`, { approved: !task.approved });
     else if (act === "autogen") await api("PATCH", `/api/tasks/${id}`, { autogen: !task.autogen });
-    else if (act === "run") { await api("POST", `/api/tasks/${id}/run`); toast("Đã đưa vào hàng đợi"); }
-    else if (act === "del") await api("DELETE", `/api/tasks/${id}`);
+    else if (act === "run") {
+      await api("POST", `/api/tasks/${id}/run`);
+      toast("Đã đưa vào hàng đợi");
+    } else if (act === "del") await api("DELETE", `/api/tasks/${id}`);
     else if (act === "view") openVideo(id, task.topic);
     else if (act === "download") {
       const a = document.createElement("a");
@@ -110,7 +134,9 @@ $("rows").addEventListener("click", async (e) => {
       a.download = `${(task.topic || "video").replace(/[^\wÀ-ɏ]+/g, "-")}.mp4`;
       a.click();
     }
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("rows").addEventListener("change", async (e) => {
@@ -120,25 +146,43 @@ $("rows").addEventListener("change", async (e) => {
   const act = e.target.dataset.act;
   try {
     if (act === "vref") await api("PATCH", `/api/tasks/${id}`, { voiceRef: e.target.value });
-    else if (act === "aspect") await api("PATCH", `/api/tasks/${id}`, { aspectRatio: e.target.value });
+    else if (act === "aspect")
+      await api("PATCH", `/api/tasks/${id}`, { aspectRatio: e.target.value });
     else if (act === "music") await api("PATCH", `/api/tasks/${id}`, { music: e.target.value });
-  } catch (err) { toast(err.message, true); }
+    else if (act === "mode") await api("PATCH", `/api/tasks/${id}`, { mode: e.target.value });
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 // ---------- Add / upload / bulk ----------
-$("btn-add").addEventListener("click", async () => {
+async function addTaskFromForm(mode) {
   const topic = $("f-topic").value.trim();
   const content = $("f-content").value.trim();
   if (!topic && !content) return toast("Nhập chủ đề hoặc nội dung", true);
+  if (mode === "heygen" && !META.heygen?.configured) {
+    return toast("Cấu hình HeyGen (API key + avatar_id) trước khi tạo task HeyGen", true);
+  }
   try {
     await api("POST", "/api/tasks", {
-      topic, content, approved: $("f-approved").checked, autogen: $("f-autogen").checked,
-      voiceRef: $("f-vref").value, music: $("f-music").value, aspectRatio: $("f-aspect").value,
+      topic,
+      content,
+      approved: $("f-approved").checked,
+      autogen: $("f-autogen").checked,
+      voiceRef: $("f-vref").value,
+      music: $("f-music").value,
+      aspectRatio: $("f-aspect").value,
+      mode,
     });
-    $("f-topic").value = ""; $("f-content").value = "";
-    toast("Đã thêm task");
-  } catch (err) { toast(err.message, true); }
-});
+    $("f-topic").value = "";
+    $("f-content").value = "";
+    toast(mode === "heygen" ? "Đã thêm task Hyperframe + HeyGen" : "Đã thêm task Hyperframe");
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+$("btn-add").addEventListener("click", () => addTaskFromForm("hyperframe"));
+$("btn-add-heygen").addEventListener("click", () => addTaskFromForm("heygen"));
 
 $("btn-upload").addEventListener("click", async () => {
   const f = $("f-file").files[0];
@@ -152,7 +196,9 @@ $("btn-upload").addEventListener("click", async () => {
     const r = await api("POST", "/api/upload", fd, true);
     toast(`Đã nhập ${r.created} dòng`);
     $("f-file").value = "";
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-drive").addEventListener("click", async () => {
@@ -164,8 +210,12 @@ $("btn-drive").addEventListener("click", async () => {
     toast("Đang đồng bộ nhạc từ Drive…");
     const r = await api("POST", "/api/drive/sync", { url, apiKey });
     await refreshMeta();
-    toast(`Đồng bộ xong: tải mới ${r.downloaded} file (tổng ${r.total} bản nhạc)${r.failed ? `, lỗi ${r.failed}` : ""}`);
-  } catch (err) { toast(err.message, true); }
+    toast(
+      `Đồng bộ xong: tải mới ${r.downloaded} file (tổng ${r.total} bản nhạc)${r.failed ? `, lỗi ${r.failed}` : ""}`,
+    );
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-bulk").addEventListener("click", async () => {
@@ -174,50 +224,128 @@ $("btn-bulk").addEventListener("click", async () => {
   const music = $("bulk-music").value;
   if (!voiceRef && !aspectRatio && !music) return toast("Chọn giọng/tỷ lệ/nhạc để áp dụng", true);
   try {
-    const r = await api("POST", "/api/bulk", { voiceRef, aspectRatio, music, onlyApproved: $("bulk-approved-only").checked });
+    const r = await api("POST", "/api/bulk", {
+      voiceRef,
+      aspectRatio,
+      music,
+      onlyApproved: $("bulk-approved-only").checked,
+    });
     toast(`Đã cập nhật ${r.updated} task`);
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-runall").addEventListener("click", async () => {
   try {
     const r = await api("POST", "/api/run-all");
-    toast(r.enqueued ? `Đã xếp ${r.enqueued} task vào hàng đợi` : "Không có task đã duyệt nào để chạy", !r.enqueued);
-  } catch (err) { toast(err.message, true); }
+    toast(
+      r.enqueued ? `Đã xếp ${r.enqueued} task vào hàng đợi` : "Không có task đã duyệt nào để chạy",
+      !r.enqueued,
+    );
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-clear").addEventListener("click", async () => {
   if (!confirm("Xoá tất cả task?")) return;
-  try { const r = await api("POST", "/api/clear"); if (!r.ok) toast(r.error, true); } catch (err) { toast(err.message, true); }
+  try {
+    const r = await api("POST", "/api/clear");
+    if (!r.ok) toast(r.error, true);
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 // ---------- OpenRouter config ----------
 $("btn-or-save").addEventListener("click", async () => {
   try {
-    await api("POST", "/api/settings/openrouter", { apiKey: $("or-key").value, model: $("or-model").value });
+    await api("POST", "/api/settings/openrouter", {
+      apiKey: $("or-key").value,
+      model: $("or-model").value,
+    });
     $("or-key").value = "";
     await refreshMeta();
     toast("Đã lưu cấu hình OpenRouter");
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 $("btn-or-test").addEventListener("click", async () => {
   try {
     toast("Đang test OpenRouter… (gọi AI, chờ vài giây)");
-    const r = await api("POST", "/api/openrouter/test", { model: $("or-model").value || undefined });
-    toast(`✓ OpenRouter OK (${r.ms}ms · ${r.segments} đoạn · "${r.title}")`);
-  } catch (err) { toast("OpenRouter lỗi: " + err.message, true); }
+    const r = await api("POST", "/api/openrouter/test", {
+      model: $("or-model").value || undefined,
+    });
+    toast(`✓ OpenRouter OK (${r.ms}ms · ${r.scenes} cảnh · ${r.layouts} layout · "${r.title}")`);
+  } catch (err) {
+    toast("OpenRouter lỗi: " + err.message, true);
+  }
+});
+
+// ---------- Prompt AI (sửa được) ----------
+$("btn-pr-save").addEventListener("click", async () => {
+  try {
+    await api("POST", "/api/settings/prompts", {
+      system: $("pr-system").value,
+      userTemplate: $("pr-user").value,
+    });
+    await refreshMeta();
+    toast("Đã lưu prompt AI");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+$("btn-pr-reset").addEventListener("click", async () => {
+  if (!confirm("Khôi phục prompt về mặc định?")) return;
+  try {
+    await api("POST", "/api/settings/prompts/reset");
+    await refreshMeta();
+    toast("Đã khôi phục prompt mặc định");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+// ---------- HeyGen config ----------
+$("btn-hg-save").addEventListener("click", async () => {
+  try {
+    await api("POST", "/api/settings/heygen", {
+      apiKey: $("hg-key").value,
+      avatarId: $("hg-avatar").value,
+    });
+    $("hg-key").value = "";
+    await refreshMeta();
+    toast("Đã lưu cấu hình HeyGen");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+$("btn-hg-test").addEventListener("click", async () => {
+  try {
+    toast("Đang test HeyGen…");
+    const r = await api("POST", "/api/heygen/test");
+    toast(`✓ HeyGen OK (${r.ms}ms · avatar: ${r.avatar})`);
+  } catch (err) {
+    toast("HeyGen lỗi: " + err.message, true);
+  }
 });
 
 // ---------- Vbee config ----------
 $("btn-vb-save").addEventListener("click", async () => {
   try {
     await api("POST", "/api/settings/vbee", {
-      appId: $("vb-app").value, token: $("vb-token").value, baseUrl: $("vb-base").value,
+      appId: $("vb-app").value,
+      token: $("vb-token").value,
+      baseUrl: $("vb-base").value,
     });
     $("vb-token").value = "";
     await refreshMeta();
     toast("Đã lưu cấu hình Vbee");
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-vb-addvoice").addEventListener("click", async () => {
@@ -227,10 +355,13 @@ $("btn-vb-addvoice").addEventListener("click", async () => {
   const voices = [...META.vbee.voices, { code, label }];
   try {
     await api("POST", "/api/settings/vbee/voices", { voices });
-    $("vb-new-code").value = ""; $("vb-new-label").value = "";
+    $("vb-new-code").value = "";
+    $("vb-new-label").value = "";
     await refreshMeta();
     toast("Đã thêm giọng Vbee");
-  } catch (err) { toast(err.message, true); }
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 $("btn-vb-test").addEventListener("click", async () => {
@@ -240,14 +371,21 @@ $("btn-vb-test").addEventListener("click", async () => {
     toast("Đang test Vbee… (gọi API)");
     const r = await api("POST", "/api/vbee/test", { voiceCode });
     toast(`✓ Vbee OK (${r.ms}ms, ${r.size} bytes)`);
-  } catch (err) { toast("Vbee lỗi: " + err.message, true); }
+  } catch (err) {
+    toast("Vbee lỗi: " + err.message, true);
+  }
 });
 
 $("vb-voices").addEventListener("click", async (e) => {
   if (e.target.dataset.del === undefined) return;
   const code = e.target.dataset.del;
   const voices = META.vbee.voices.filter((v) => v.code !== code);
-  try { await api("POST", "/api/settings/vbee/voices", { voices }); await refreshMeta(); } catch (err) { toast(err.message, true); }
+  try {
+    await api("POST", "/api/settings/vbee/voices", { voices });
+    await refreshMeta();
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 
 // ---------- Modal ----------
@@ -258,14 +396,32 @@ function openVideo(id, title) {
   $("modal").classList.add("show");
   v.play().catch(() => {});
 }
-$("modal-close").addEventListener("click", () => { $("modal").classList.remove("show"); $("modal-video").pause(); });
-$("modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("modal-close").click(); });
+$("modal-close").addEventListener("click", () => {
+  $("modal").classList.remove("show");
+  $("modal-video").pause();
+});
+$("modal").addEventListener("click", (e) => {
+  if (e.target.id === "modal") $("modal-close").click();
+});
 
 // ---------- Render config ----------
 function renderConfig() {
   // OpenRouter
   $("or-model").value = META.openrouter?.model || "openai/gpt-4o-mini";
   $("or-status").innerHTML = META.openrouter?.configured
+    ? '<span style="color:var(--green)">● đã cấu hình</span>'
+    : '<span style="color:var(--red)">● chưa cấu hình</span>';
+  // Prompt AI
+  if (META.prompts) {
+    $("pr-system").value = META.prompts.system || "";
+    $("pr-user").value = META.prompts.userTemplate || "";
+    $("pr-status").innerHTML = META.prompts.isDefault
+      ? '<span style="color:var(--muted)">(mặc định)</span>'
+      : '<span style="color:var(--amber)">(đã sửa)</span>';
+  }
+  // HeyGen
+  $("hg-avatar").value = META.heygen?.avatarId || "";
+  $("hg-status").innerHTML = META.heygen?.configured
     ? '<span style="color:var(--green)">● đã cấu hình</span>'
     : '<span style="color:var(--red)">● chưa cấu hình</span>';
   // Vbee
@@ -275,14 +431,22 @@ function renderConfig() {
     ? '<span style="color:var(--green)">● đã cấu hình</span>'
     : '<span style="color:var(--red)">● chưa cấu hình</span>';
   $("vb-voices").innerHTML = META.vbee.voices
-    .map((v) => `<div class="tagitem"><div><b>${esc(v.label || v.code)}</b><br><span class="code">${esc(v.code)}</span></div><button class="ghost danger" data-del="${esc(v.code)}">✕</button></div>`)
+    .map(
+      (v) =>
+        `<div class="tagitem"><div><b>${esc(v.label || v.code)}</b><br><span class="code">${esc(v.code)}</span></div><button class="ghost danger" data-del="${esc(v.code)}">✕</button></div>`,
+    )
     .join("");
   $("vb-test-voice").innerHTML = META.vbee.voices.length
-    ? META.vbee.voices.map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`).join("")
+    ? META.vbee.voices
+        .map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`)
+        .join("")
     : `<option value="">(chưa có giọng)</option>`;
   // Danh sách nhạc (xoá được)
   $("music-list").innerHTML = (META.music || [])
-    .map((m) => `<div class="tagitem"><div><b>${esc(m.name)}</b></div><button class="ghost danger" data-del="${esc(m.id)}">✕</button></div>`)
+    .map(
+      (m) =>
+        `<div class="tagitem"><div><b>${esc(m.name)}</b></div><button class="ghost danger" data-del="${esc(m.id)}">✕</button></div>`,
+    )
     .join("");
   // Warn
   const noVoice = !META.vbee.configured;
@@ -305,8 +469,14 @@ $("music-list").addEventListener("click", async (e) => {
 function fillFormSelects() {
   $("f-vref").innerHTML = refOptions($("f-vref").value);
   $("f-music").innerHTML = musicOptions($("f-music").value);
-  $("bulk-vref").innerHTML = `<option value="">- Giọng -</option>` + META.vbee.voices.map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`).join("");
-  $("bulk-music").innerHTML = `<option value="">- Nhạc -</option>` + musicOptions("__none__").replace('value="random"', 'value="random"');
+  $("bulk-vref").innerHTML =
+    `<option value="">- Giọng -</option>` +
+    META.vbee.voices
+      .map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`)
+      .join("");
+  $("bulk-music").innerHTML =
+    `<option value="">- Nhạc -</option>` +
+    musicOptions("__none__").replace('value="random"', 'value="random"');
 }
 
 async function refreshMeta() {
@@ -323,7 +493,9 @@ async function boot() {
     $("q-conc").textContent = META.queue?.concurrency ?? 2;
     renderConfig();
     fillFormSelects();
-  } catch (err) { toast("Không tải được cấu hình: " + err.message, true); }
+  } catch (err) {
+    toast("Không tải được cấu hình: " + err.message, true);
+  }
 
   const es = new EventSource("/api/events");
   es.onmessage = (ev) => {

@@ -44,12 +44,16 @@ header h1 .dot { color: var(--teal); }
 }
 .card h3 { margin: 0 0 14px; font-size: 14px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); }
 label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 5px; }
-input[type=text], textarea, select {
+input[type=text], input[type=password], textarea, select {
   width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
   border-radius: 9px; padding: 9px 11px; font-size: 13px; font-family: inherit;
 }
 textarea { resize: vertical; min-height: 78px; }
+textarea.mono { font-family: "SFMono-Regular", "Consolas", "Menlo", monospace; font-size: 12px; line-height: 1.5; white-space: pre; }
 select { cursor: pointer; }
+details.prompts { margin-top: 12px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; background: rgba(255,255,255,0.02); }
+details.prompts summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--teal); }
+details.prompts code { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 11px; color: var(--amber); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .row-inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 

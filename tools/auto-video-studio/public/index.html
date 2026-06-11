@@ -35,6 +35,19 @@
           <span id="or-status" class="hint" style="margin:0;"></span>
         </div>
         <div class="hint">Bật <b>"Tự sinh nội dung (AI)"</b> ở ô Thêm task rồi chỉ cần nhập <b>chủ đề</b> → AI viết kịch bản 2–3 phút. Giọng đọc <b>liền mạch không ngắt nghỉ</b>, các frame chỉ minh hoạ chạy song song.</div>
+
+        <details class="prompts" style="margin-top:12px;">
+          <summary>✏️ Sửa prompt AI (master prompt + lời nhắc) <span id="pr-status" class="hint" style="margin:0;"></span></summary>
+          <label style="margin-top:10px;">SYSTEM prompt (vai trò đạo diễn + luật + schema layout)</label>
+          <textarea id="pr-system" class="mono" rows="14" spellcheck="false"></textarea>
+          <label>Template lời nhắc người dùng <span style="color:var(--muted)">(dùng <code>{{topic}}</code> và <code>{{guidance}}</code>)</span></label>
+          <textarea id="pr-user" class="mono" rows="4" spellcheck="false"></textarea>
+          <div class="row-inline" style="margin-top:10px;">
+            <button class="primary" id="btn-pr-save">Lưu prompt</button>
+            <button class="sm ghost" id="btn-pr-reset">Khôi phục mặc định</button>
+            <span class="hint" style="margin:0;"><code>{{topic}}</code> = chủ đề, <code>{{guidance}}</code> = nội dung/dàn ý (tự bỏ nếu trống).</span>
+          </div>
+        </details>
       </div>
 
       <!-- Hàng 1: Thêm task + Excel/Drive -->
@@ -68,7 +81,11 @@
               <label class="checkbox"><input type="checkbox" id="f-approved" checked /> Đã duyệt</label>
             </div>
           </div>
-          <button class="primary" id="btn-add" style="margin-top: 12px;">Thêm vào danh sách</button>
+          <div class="row2" style="margin-top: 12px;">
+            <button class="primary" id="btn-add" title="Chỉ slide Hyperframe + giọng + nhạc">➕ Hyperframe</button>
+            <button class="amber" id="btn-add-heygen" title="Ghép thêm avatar HeyGen nói (chia đôi khung)">➕ Hyperframe + HeyGen</button>
+          </div>
+          <div class="hint">Nút phải tạo task chế độ <b>HeyGen</b>: avatar nói chiếm một nửa khung (9:16: trên/dưới · 16:9: trái/phải). Cần cấu hình HeyGen bên dưới.</div>
         </div>
 
         <div class="card">
@@ -124,6 +141,21 @@
         <div class="hint">Lấy <b>voice_code</b> chính xác trong dashboard Vbee của bạn. Endpoint có thể chỉnh ở Base URL nếu gói của bạn khác.</div>
       </div>
 
+      <!-- Cấu hình HeyGen (chế độ ghép avatar) -->
+      <div class="card" style="margin-bottom: 18px;">
+        <h3>Avatar nói - HeyGen (chế độ ghép)</h3>
+        <div class="row2">
+          <div><label>HeyGen API key</label><input type="password" id="hg-key" placeholder="để trống nếu không đổi" /></div>
+          <div><label>avatar_id <span style="color:var(--muted)">(nhiều cái cách nhau bằng dấu phẩy/xuống dòng → chọn ngẫu nhiên)</span></label><input type="text" id="hg-avatar" placeholder="vd: Daisy-inskirt-20220818, ..." /></div>
+        </div>
+        <div class="row-inline" style="margin-top: 10px;">
+          <button class="primary" id="btn-hg-save">Lưu cấu hình</button>
+          <button class="sm" id="btn-hg-test">Test HeyGen</button>
+          <span id="hg-status" class="hint" style="margin:0;"></span>
+        </div>
+        <div class="hint">Giọng đọc dùng <b>Vbee</b> (gửi URL audio sang HeyGen). Nền avatar đặt = màu nền tối của slide để hoà liền mạch. Chỉ task tạo bằng nút <b>"➕ Hyperframe + HeyGen"</b> mới dùng phần này.</div>
+      </div>
+
       <!-- Thanh điều khiển hàng loạt -->
       <div class="toolbar">
         <div class="left">
@@ -148,6 +180,7 @@
               <th>Chủ đề</th>
               <th>Nội dung</th>
               <th>Duyệt</th>
+              <th>Chế độ</th>
               <th>Giọng</th>
               <th>Tỷ lệ</th>
               <th>Nhạc</th>
@@ -156,7 +189,7 @@
             </tr>
           </thead>
           <tbody id="rows">
-            <tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>
+            <tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>
           </tbody>
         </table>
       </div>

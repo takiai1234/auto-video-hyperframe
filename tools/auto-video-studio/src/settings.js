@@ -1,7 +1,8 @@
-// Lưu cấu hình (Vbee + danh sách giọng Vbee gợi ý) vào data/settings.json.
+// Lưu cấu hình (Vbee + danh sách giọng Vbee gợi ý + prompt AI + HeyGen) vào data/settings.json.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_SYSTEM, DEFAULT_USER_TEMPLATE } from "./prompts.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, "..", "data");
@@ -33,6 +34,19 @@ const defaults = {
     apiKey: process.env.OPENROUTER_API_KEY || "",
     model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
   },
+  // Prompt cho AI sinh kịch bản - sửa được trên giao diện, khôi phục được mặc định.
+  prompts: {
+    system: DEFAULT_SYSTEM,
+    userTemplate: DEFAULT_USER_TEMPLATE,
+  },
+  // HeyGen (chế độ ghép avatar nói cùng slide Hyperframe).
+  heygen: {
+    apiKey: process.env.HEYGEN_API_KEY || "",
+    // Nhiều avatar_id cách nhau bằng dấu phẩy hoặc xuống dòng -> chọn ngẫu nhiên.
+    avatarId: process.env.HEYGEN_AVATAR_ID || "",
+    // Màu nền avatar (đặt = nền tối của slide để hoà liền mạch).
+    background: process.env.HEYGEN_BG || "#03070f",
+  },
 };
 
 let state = load();
@@ -41,8 +55,14 @@ function load() {
   try {
     const disk = JSON.parse(fs.readFileSync(FILE, "utf8"));
     return {
-      vbee: { ...defaults.vbee, ...(disk.vbee || {}), voices: disk.vbee?.voices || defaults.vbee.voices },
+      vbee: {
+        ...defaults.vbee,
+        ...(disk.vbee || {}),
+        voices: disk.vbee?.voices || defaults.vbee.voices,
+      },
       openrouter: { ...defaults.openrouter, ...(disk.openrouter || {}) },
+      prompts: { ...defaults.prompts, ...(disk.prompts || {}) },
+      heygen: { ...defaults.heygen, ...(disk.heygen || {}) },
     };
   } catch {
     return structuredClone(defaults);
@@ -90,6 +110,58 @@ export function publicOpenrouter() {
     model: state.openrouter.model,
     hasKey: Boolean(state.openrouter.apiKey),
     configured: isOpenrouterConfigured(),
+  };
+}
+
+// ---- Prompt AI (sinh kịch bản) ----
+export function getPromptsConfig() {
+  return {
+    system: state.prompts?.system || DEFAULT_SYSTEM,
+    userTemplate: state.prompts?.userTemplate || DEFAULT_USER_TEMPLATE,
+  };
+}
+export function setPromptsConfig(patch) {
+  const next = { ...state.prompts };
+  if (typeof patch?.system === "string") next.system = patch.system;
+  if (typeof patch?.userTemplate === "string") next.userTemplate = patch.userTemplate;
+  state.prompts = next;
+  persist();
+  return getPromptsConfig();
+}
+export function resetPromptsConfig() {
+  state.prompts = { system: DEFAULT_SYSTEM, userTemplate: DEFAULT_USER_TEMPLATE };
+  persist();
+  return getPromptsConfig();
+}
+export function publicPrompts() {
+  const p = getPromptsConfig();
+  return {
+    system: p.system,
+    userTemplate: p.userTemplate,
+    defaults: { system: DEFAULT_SYSTEM, userTemplate: DEFAULT_USER_TEMPLATE },
+    isDefault: p.system === DEFAULT_SYSTEM && p.userTemplate === DEFAULT_USER_TEMPLATE,
+  };
+}
+
+// ---- HeyGen (chế độ ghép avatar) ----
+export function getHeygenConfig() {
+  return state.heygen;
+}
+export function isHeygenConfigured() {
+  return Boolean(state.heygen.apiKey && state.heygen.avatarId);
+}
+export function setHeygenConfig(patch) {
+  state.heygen = { ...state.heygen, ...patch };
+  persist();
+  return state.heygen;
+}
+export function publicHeygen() {
+  const h = state.heygen;
+  return {
+    hasKey: Boolean(h.apiKey),
+    avatarId: h.avatarId,
+    background: h.background,
+    configured: isHeygenConfigured(),
   };
 }
 

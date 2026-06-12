@@ -47,7 +47,14 @@ const defaults = {
     // Màu nền avatar (đặt = nền tối của slide để hoà liền mạch).
     background: process.env.HEYGEN_BG || "#03070f",
   },
+  // Số video chạy song song (1-5).
+  concurrency: clampConcurrency(process.env.CONCURRENCY || 2),
 };
+
+export function clampConcurrency(v) {
+  const n = Math.round(Number(v) || 2);
+  return Math.max(1, Math.min(5, n));
+}
 
 let state = load();
 
@@ -63,6 +70,7 @@ function load() {
       openrouter: { ...defaults.openrouter, ...(disk.openrouter || {}) },
       prompts: { ...defaults.prompts, ...(disk.prompts || {}) },
       heygen: { ...defaults.heygen, ...(disk.heygen || {}) },
+      concurrency: clampConcurrency(disk.concurrency ?? defaults.concurrency),
     };
   } catch {
     return structuredClone(defaults);
@@ -141,6 +149,16 @@ export function publicPrompts() {
     defaults: { system: DEFAULT_SYSTEM, userTemplate: DEFAULT_USER_TEMPLATE },
     isDefault: p.system === DEFAULT_SYSTEM && p.userTemplate === DEFAULT_USER_TEMPLATE,
   };
+}
+
+// ---- Số luồng chạy song song (1-5) ----
+export function getConcurrency() {
+  return clampConcurrency(state.concurrency);
+}
+export function setConcurrency(v) {
+  state.concurrency = clampConcurrency(v);
+  persist();
+  return state.concurrency;
 }
 
 // ---- HeyGen (chế độ ghép avatar) ----

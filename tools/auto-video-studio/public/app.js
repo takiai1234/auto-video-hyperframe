@@ -79,7 +79,7 @@ function renderTasks() {
     const heygen = t.mode === "heygen";
     const resultInfo =
       t.status === "done" && t.result
-        ? `<div class="hint" style="margin-top:4px;">⏱ ${t.result.duration}s · ${t.result.scenes} cảnh · ${esc(t.result.voice)} · ${esc(t.result.music)}${t.result.avatar ? ` · 🧑 ${esc(t.result.avatar)}` : ""}</div>`
+        ? `<div class="hint" style="margin-top:4px;">⏱ ${t.result.duration}s · ${t.result.scenes} cảnh · ${esc(t.result.voice)} · ${esc(t.result.music)}${t.result.avatar ? ` · 🧑 ${esc(String(t.result.avatar).slice(0, 8))}…` : ""}</div>`
         : "";
     return `<tr class="st-${t.status}" data-id="${t.id}">
       <td class="idx">${i + 1}</td>
@@ -222,12 +222,17 @@ $("btn-bulk").addEventListener("click", async () => {
   const voiceRef = $("bulk-vref").value;
   const aspectRatio = $("bulk-aspect").value;
   const music = $("bulk-music").value;
-  if (!voiceRef && !aspectRatio && !music) return toast("Chọn giọng/tỷ lệ/nhạc để áp dụng", true);
+  const mode = $("bulk-mode").value;
+  if (!voiceRef && !aspectRatio && !music && !mode)
+    return toast("Chọn giọng/tỷ lệ/chế độ/nhạc để áp dụng", true);
+  if (mode === "heygen" && !META.heygen?.configured)
+    return toast("Cấu hình HeyGen trước khi áp dụng chế độ HeyGen", true);
   try {
     const r = await api("POST", "/api/bulk", {
       voiceRef,
       aspectRatio,
       music,
+      mode,
       onlyApproved: $("bulk-approved-only").checked,
     });
     toast(`Đã cập nhật ${r.updated} task`);
@@ -256,6 +261,47 @@ $("btn-clear").addEventListener("click", async () => {
   } catch (err) {
     toast(err.message, true);
   }
+});
+
+// Số luồng chạy song song (1-5)
+$("sel-conc").addEventListener("change", async () => {
+  try {
+    const r = await api("POST", "/api/settings/concurrency", {
+      value: Number($("sel-conc").value),
+    });
+    $("q-conc").textContent = r.concurrency;
+    toast(`Chạy song song: ${r.concurrency} luồng`);
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+// Tải tất cả video đã hoàn tất
+$("btn-download-all").addEventListener("click", async () => {
+  const done = TASKS.filter((t) => t.status === "done" && t.result);
+  if (!done.length) return toast("Chưa có video hoàn tất nào để tải", true);
+  toast(`Đang tải ${done.length} video...`);
+  for (let i = 0; i < done.length; i++) {
+    const t = done[i];
+    const name = `${String(i + 1).padStart(2, "0")}-${(t.topic || "video").replace(/[^\wÀ-ɏ]+/g, "-")}.mp4`;
+    const a = document.createElement("a");
+    a.href = `/api/video/${t.id}`;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // chờ giữa các lần tải để trình duyệt không chặn tải hàng loạt
+    await new Promise((r) => setTimeout(r, 700));
+  }
+});
+
+$("btn-shutdown").addEventListener("click", async () => {
+  if (!confirm("Tắt tool? Tool đang chạy ngầm sẽ dừng hẳn (lịch sử task vẫn được lưu).")) return;
+  try {
+    await api("POST", "/api/shutdown");
+  } catch {}
+  toast("Đã gửi lệnh tắt tool. Trang này sẽ ngừng cập nhật.");
+  document.body.style.opacity = "0.5";
 });
 
 // ---------- OpenRouter config ----------
@@ -490,7 +536,9 @@ async function refreshMeta() {
 async function boot() {
   try {
     META = await api("GET", "/api/meta");
-    $("q-conc").textContent = META.queue?.concurrency ?? 2;
+    const conc = META.queue?.concurrency ?? 2;
+    $("q-conc").textContent = conc;
+    $("sel-conc").value = String(conc);
     renderConfig();
     fillFormSelects();
   } catch (err) {

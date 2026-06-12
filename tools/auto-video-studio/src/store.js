@@ -1,19 +1,101 @@
-// Kho task trong bộ nhớ + hàng đợi chạy song song (mặc định 2 task / lúc).
+// Kho task + hàng đợi chạy song song (mặc định 2 task / lúc).
+// Lịch sử task được LƯU XUỐNG ĐĨA (data/tasks.json) -> còn nguyên khi tắt/mở lại tool.
+// Tự động xoá task cũ hơn 7 ngày.
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { produceVideo } from "./pipeline.js";
+import { getConcurrency, setConcurrency as persistConcurrency } from "./settings.js";
 
 export const events = new EventEmitter();
 events.setMaxListeners(100);
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.resolve(__dirname, "..", "data");
+const TASKS_FILE = path.join(DATA_DIR, "tasks.json");
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 ngày
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
 const tasks = new Map();
 let seq = 0;
 
-export const CONCURRENCY = Number(process.env.CONCURRENCY || 2);
+let concurrency = getConcurrency(); // số luồng song song (1-5), đổi được lúc chạy
 let running = 0;
 const waiting = []; // id đang chờ chạy
 
+export function setConcurrency(v) {
+  concurrency = persistConcurrency(v); // clamp 1-5 + lưu xuống đĩa
+  emit();
+  pump(); // tăng luồng -> chạy thêm task đang chờ ngay
+  return concurrency;
+}
+
+// ---- Lưu / nạp lịch sử ----
+function purgeOld() {
+  const cutoff = Date.now() - RETENTION_MS;
+  let removed = 0;
+  for (const [id, t] of tasks) {
+    if ((t.createdAt || 0) < cutoff) {
+      tasks.delete(id);
+      removed++;
+    }
+  }
+  return removed;
+}
+
+function loadTasks() {
+  try {
+    const arr = JSON.parse(fs.readFileSync(TASKS_FILE, "utf8"));
+    if (!Array.isArray(arr)) return;
+    for (const t of arr) {
+      if (!t || !t.id) continue;
+      // Task đang chạy/chờ lúc tool tắt -> coi như gián đoạn, đưa về idle để chạy lại.
+      if (t.status === "running" || t.status === "queued") {
+        t.status = "idle";
+        t.phase = "";
+        t.percent = 0;
+        t.detail = "";
+      }
+      tasks.set(String(t.id), t);
+      const n = Number(t.id);
+      if (Number.isFinite(n) && n > seq) seq = n;
+    }
+    purgeOld();
+  } catch {
+    // chưa có file -> bỏ qua
+  }
+}
+
+let persistTimer = null;
+function writeTasksSync() {
+  persistTimer = null;
+  try {
+    fs.writeFileSync(TASKS_FILE, JSON.stringify(Array.from(tasks.values()), null, 2), "utf8");
+  } catch {}
+}
+function schedulePersist() {
+  if (persistTimer) return;
+  persistTimer = setTimeout(writeTasksSync, 1200);
+}
+// Ghi ngay (dùng khi tắt tool).
+export function flushTasks() {
+  if (persistTimer) clearTimeout(persistTimer);
+  writeTasksSync();
+}
+
+loadTasks();
+// Dọn lịch sử quá 7 ngày định kỳ (mỗi 6 giờ).
+setInterval(
+  () => {
+    if (purgeOld() > 0) emit();
+  },
+  6 * 60 * 60 * 1000,
+).unref();
+
 function emit() {
   events.emit("update", listTasks());
+  schedulePersist();
 }
 
 export function listTasks() {
@@ -70,6 +152,7 @@ export function clearTasks() {
   tasks.clear();
   seq = 0;
   emit();
+  flushTasks();
   return true;
 }
 
@@ -117,7 +200,7 @@ export function enqueueAllApproved() {
 }
 
 function pump() {
-  while (running < CONCURRENCY && waiting.length > 0) {
+  while (running < concurrency && waiting.length > 0) {
     const id = waiting.shift();
     const t = tasks.get(id);
     if (!t) continue;
@@ -152,5 +235,5 @@ async function runTask(t) {
 }
 
 export function queueStats() {
-  return { running, waiting: waiting.length, concurrency: CONCURRENCY };
+  return { running, waiting: waiting.length, concurrency };
 }

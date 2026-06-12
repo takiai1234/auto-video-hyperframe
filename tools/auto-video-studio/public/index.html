@@ -17,6 +17,7 @@
           <div class="badge-stat"><b id="q-running">0</b>đang chạy</div>
           <div class="badge-stat"><b id="q-waiting">0</b>chờ</div>
           <div class="badge-stat"><b id="q-conc">2</b>song song</div>
+          <button class="ghost danger sm" id="btn-shutdown" title="Dừng hẳn tool (tool đang chạy ngầm)">⏻ Tắt tool</button>
         </div>
       </header>
 
@@ -162,11 +163,22 @@
           <span style="color: var(--muted); font-size: 12px;">Áp dụng cho tất cả:</span>
           <select id="bulk-vref"><option value="">- Giọng -</option></select>
           <select id="bulk-aspect"><option value="">- Tỷ lệ -</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select>
+          <select id="bulk-mode"><option value="">- Chế độ -</option><option value="hyperframe">Hyperframe</option><option value="heygen">Hyperframe + HeyGen</option></select>
           <select id="bulk-music"><option value="">- Nhạc -</option></select>
           <label class="checkbox"><input type="checkbox" id="bulk-approved-only" /> chỉ task đã duyệt</label>
           <button class="sm" id="btn-bulk">Áp dụng</button>
         </div>
         <div class="right">
+          <label class="conc" title="Số video render cùng lúc (tối đa 5)">⚙ Luồng
+            <select id="sel-conc">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <button class="sm" id="btn-download-all" title="Tải mọi video đã hoàn tất">⬇ Tải tất cả</button>
           <button class="ghost danger sm" id="btn-clear">Xoá tất cả</button>
           <button class="amber" id="btn-runall">▶ Chạy tất cả đã duyệt</button>
         </div>

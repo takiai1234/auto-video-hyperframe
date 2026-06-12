@@ -32,6 +32,8 @@ import {
   enqueue,
   enqueueAllApproved,
   queueStats,
+  flushTasks,
+  setConcurrency,
 } from "./src/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,7 +110,7 @@ app.post("/api/clear", (req, res) => {
 
 // ---- Áp dụng voice/nhạc hàng loạt ----
 app.post("/api/bulk", (req, res) => {
-  const { voiceRef, aspectRatio, music, onlyApproved } = req.body || {};
+  const { voiceRef, aspectRatio, music, mode, onlyApproved } = req.body || {};
   let n = 0;
   for (const t of listTasks()) {
     if (onlyApproved && t.approved !== true) continue;
@@ -116,6 +118,7 @@ app.post("/api/bulk", (req, res) => {
     if (voiceRef !== undefined && voiceRef !== "") patch.voiceRef = voiceRef;
     if (aspectRatio) patch.aspectRatio = aspectRatio;
     if (music) patch.music = music;
+    if (mode) patch.mode = mode === "heygen" ? "heygen" : "hyperframe";
     if (Object.keys(patch).length) {
       updateTask(t.id, patch);
       n++;
@@ -134,6 +137,12 @@ app.post("/api/tasks/:id/run", (req, res) => {
 app.post("/api/run-all", (req, res) => {
   const n = enqueueAllApproved();
   res.json({ enqueued: n });
+});
+
+// ---- Số luồng chạy song song (1-5) ----
+app.post("/api/settings/concurrency", (req, res) => {
+  const value = setConcurrency(req.body?.value);
+  res.json({ queue: queueStats(), concurrency: value });
 });
 
 // ---- Cấu hình Vbee ----
@@ -313,7 +322,25 @@ app.get("/api/sample-xlsx", (req, res) => {
   res.send(buf);
 });
 
+// ---- Tắt tool (từ nút trên giao diện) ----
+app.post("/api/shutdown", (req, res) => {
+  res.json({ ok: true });
+  console.log("\n  Nhận lệnh tắt tool từ giao diện. Đang lưu lịch sử và thoát...");
+  flushTasks();
+  setTimeout(() => process.exit(0), 200);
+});
+
+// Lưu lịch sử khi process bị tắt (Ctrl+C / kill).
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => {
+    flushTasks();
+    process.exit(0);
+  });
+}
+
 app.listen(PORT, () => {
   console.log(`\n  AutoVideo Hyperframe đang chạy tại  http://localhost:${PORT}`);
-  console.log("  Giọng đọc: Vbee (API).\n");
+  console.log(
+    "  Giọng đọc: Vbee (API). Lịch sử task lưu tại data/tasks.json (tự xoá sau 7 ngày).\n",
+  );
 });

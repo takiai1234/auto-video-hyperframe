@@ -12,6 +12,11 @@ function esc(s) {
 function arr(x) {
   return Array.isArray(x) ? x : [];
 }
+function clean(s) {
+  return String(s == null ? "" : s)
+    .replace(/\s+/g, " ")
+    .trim();
+}
 const ACCENTS = ["teal", "amber", "violet"];
 
 function initials(s) {
@@ -154,6 +159,57 @@ function sceneHtml(s, i) {
         (s.subtitle ? `<div class="outro-sub" id="${p}_sub">${esc(s.subtitle)} 🎬</div>` : "");
       break;
 
+    case "section": {
+      // Số thứ tự ĐỎ lớn + tiêu đề bold nhiều dòng (như mở đầu một phần).
+      const num =
+        s.num != null && s.num !== "" ? `<span class="secnum">${esc(s.num)}.</span> ` : "";
+      inner =
+        `${kicker}<h1 class="section-h" id="${p}_h">${num}${esc(s.heading || s.title)}</h1>` +
+        (s.subtitle ? `<div class="section-sub" id="${p}_sub">${esc(s.subtitle)}</div>` : "");
+      break;
+    }
+
+    case "quote": {
+      // Thẻ trích dẫn kính mờ (glassmorphism) + dấu ngoặc kép trang trí + badge nhỏ.
+      const badge = esc(s.kicker || "TRÍCH DẪN");
+      inner = `<div class="quote-card" id="${p}_qc">
+        <div class="quote-badge">${badge}</div>
+        <div class="qmark qmark-top">“</div>
+        <div class="quote-text" id="${p}_qt">${esc(s.text || s.heading)}</div>
+        <div class="qmark qmark-bot">”</div>
+        ${s.subtitle ? `<div class="quote-by" id="${p}_qby">${esc(s.subtitle)}</div>` : ""}
+      </div>`;
+      break;
+    }
+
+    case "prompt": {
+      // Khung MẪU PROMPT/ví dụ hiển thị NGUYÊN VĂN trên màn hình (giữ xuống dòng).
+      const tag = esc(s.kicker || "PROMPT MẪU");
+      inner =
+        `${s.heading ? `<h2 class="heading" id="${p}_h">${esc(s.heading)}</h2>` : ""}` +
+        `<div class="promptbox" id="${p}_pb">
+        <div class="pb-bar"><span class="pb-dot r"></span><span class="pb-dot y"></span><span class="pb-dot g"></span><span class="pb-tag">${tag}</span><span class="pb-copy">⧉ Sao chép</span></div>
+        <div class="pb-body" id="${p}_pt">${esc(s.text || s.body || "")}</div>
+      </div>` +
+        `${s.subtitle ? `<div class="pb-note" id="${p}_sub">${esc(s.subtitle)}</div>` : ""}`;
+      break;
+    }
+
+    case "popup": {
+      // Các thẻ ví dụ/nguồn "bật lên" kiểu thông báo (pop-up).
+      const items = arr(s.items).slice(0, 4);
+      inner =
+        `${kicker}${heading}<div class="popups">` +
+        items
+          .map(
+            (it, j) =>
+              `<div class="popup-card" id="${p}_i${j}"><div class="pc-ic">${esc(it.icon || "💬")}</div><div class="pc-body"><div class="pc-title">${esc(it.title || it.label || "")}</div>${it.body || it.text ? `<div class="pc-text">${esc(it.body || it.text)}</div>` : ""}</div>${it.tag ? `<div class="pc-tag">${esc(it.tag)}</div>` : ""}</div>`,
+          )
+          .join("") +
+        `</div>`;
+      break;
+    }
+
     default: // fallback = statement
       inner = `${kicker}${heading}${s.body ? `<div class="point-body" id="${p}_b">${esc(s.body)}</div>` : ""}`;
   }
@@ -259,6 +315,63 @@ function sceneEntrances(s, i, start) {
           `tl.from("#${p}_sub", { y: 20, opacity: 0, duration: 0.6, ease: "power2.out" }, ${t(1.3)});`,
         );
       break;
+    case "section":
+      if (s.kicker)
+        L.push(
+          `tl.from("#${p}_k", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(0.05)});`,
+        );
+      L.push(
+        `tl.from("#scene-${i} .secnum", { scale: 0, opacity: 0, duration: 0.6, ease: "back.out(2)", transformOrigin: "left center" }, ${t(0.1)});`,
+      );
+      L.push(
+        `tl.from("#${p}_h", { y: 60, opacity: 0, duration: 0.85, ease: "expo.out" }, ${t(0.3)});`,
+      );
+      if (s.subtitle)
+        L.push(
+          `tl.from("#${p}_sub", { y: 26, opacity: 0, duration: 0.6, ease: "power3.out" }, ${t(0.85)});`,
+        );
+      break;
+    case "quote":
+      L.push(
+        `tl.from("#${p}_qc", { scale: 0.9, y: 40, opacity: 0, duration: 0.7, ease: "power3.out" }, ${t(0.15)});`,
+      );
+      L.push(
+        `tl.from("#scene-${i} .quote-badge", { y: -16, opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(0.45)});`,
+      );
+      L.push(
+        `tl.from("#scene-${i} .qmark-top", { scale: 0, opacity: 0, duration: 0.5, ease: "back.out(2)" }, ${t(0.55)});`,
+      );
+      L.push(
+        `tl.from("#${p}_qt", { y: 26, opacity: 0, duration: 0.7, ease: "power3.out" }, ${t(0.6)});`,
+      );
+      if (s.subtitle)
+        L.push(
+          `tl.from("#${p}_qby", { opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(1.1)});`,
+        );
+      break;
+    case "prompt":
+      if (s.heading)
+        L.push(
+          `tl.from("#scene-${i} .heading", { y: 34, opacity: 0, duration: 0.55, ease: "expo.out" }, ${t(0.1)});`,
+        );
+      L.push(
+        `tl.from("#${p}_pb", { scale: 0.92, y: 36, opacity: 0, duration: 0.7, ease: "power3.out" }, ${t(0.35)});`,
+      );
+      L.push(
+        `tl.from("#scene-${i} .pb-bar > *", { y: -10, opacity: 0, duration: 0.4, ease: "power2.out", stagger: 0.06 }, ${t(0.6)});`,
+      );
+      L.push(`tl.from("#${p}_pt", { opacity: 0, duration: 0.6, ease: "power2.out" }, ${t(0.75)});`);
+      if (s.subtitle)
+        L.push(
+          `tl.from("#${p}_sub", { y: 16, opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(1.2)});`,
+        );
+      break;
+    case "popup":
+      headIn();
+      L.push(
+        `tl.from("#scene-${i} .popup-card", { y: 50, scale: 0.85, opacity: 0, duration: 0.55, ease: "back.out(1.7)", stagger: 0.22 }, ${t(0.7)});`,
+      );
+      break;
     default:
       headIn();
       if (s.body)
@@ -267,6 +380,38 @@ function sceneEntrances(s, i, start) {
         );
   }
   return L;
+}
+
+// Phụ đề karaoke dưới cùng: hiển thị "caption" của từng cảnh, nhấn 1 cụm bằng **..**.
+// Trả về HTML các phụ đề (mỗi cảnh 1 cái, ẩn sẵn) + các tween hiện/ẩn theo mốc thời gian.
+function buildCaptions(scenes, starts, total) {
+  const html = [];
+  const tweens = [];
+  scenes.forEach((s, i) => {
+    const cap = clean(s.caption);
+    if (!cap) return;
+    html.push(`<div class="cap" id="cap-${i}">${captionHtml(cap)}</div>`);
+    const inAt = (starts[i] + 0.15).toFixed(3);
+    const end = (i + 1 < scenes.length ? starts[i + 1] : total) - 0.25;
+    const outAt = Math.max(Number(inAt) + 0.6, end).toFixed(3);
+    tweens.push(
+      `tl.fromTo("#cap-${i}", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, ${inAt});`,
+    );
+    tweens.push(
+      `tl.to("#cap-${i}", { opacity: 0, y: -12, duration: 0.4, ease: "power2.in" }, ${outAt});`,
+    );
+  });
+  return { html: html.join("\n"), tweens };
+}
+
+// "abc **def** ghi" -> nhấn cụm trong ** ** bằng màu đỏ. Nếu không có ** **, nhấn từ đầu.
+function captionHtml(cap) {
+  if (/\*\*[^*]+\*\*/.test(cap)) {
+    return esc(cap).replace(/\*\*([^*]+)\*\*/g, '<span class="cap-hl">$1</span>');
+  }
+  const m = cap.match(/^(\S+)([\s\S]*)$/);
+  if (m) return `<span class="cap-hl">${esc(m[1])}</span>${esc(m[2])}`;
+  return esc(cap);
 }
 
 export function buildComposition({
@@ -280,6 +425,7 @@ export function buildComposition({
 }) {
   const TOTAL = Number(total.toFixed(3));
   const sectionsHtml = scenes.map((s, i) => sceneHtml(s, i)).join("\n");
+  const caps = buildCaptions(scenes, starts, TOTAL);
 
   const tweens = [];
   tweens.push(
@@ -300,6 +446,8 @@ export function buildComposition({
   tweens.push(
     `tl.to("#scene-${lastIdx}", { opacity: 0, duration: 0.9, ease: "power2.in" }, ${fadeAt});`,
   );
+  // Phụ đề karaoke dưới cùng (lớp riêng, không bị ảnh hưởng bởi opacity của scene).
+  tweens.push(...caps.tweens);
 
   const isPortrait = aspectRatio === "9:16";
   // Kích thước "canvas thiết kế" (mọi px trong CSS được tinh chỉnh theo cỡ này).
@@ -421,6 +569,96 @@ export function buildComposition({
       .point-body{font-size:33px;line-height:1.5;color:var(--muted);margin-top:30px;max-width:1280px;
         background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:36px 44px;}
 
+      /* ===== Cinematic background: bokeh + vignette + grain ===== */
+      .bokeh{position:absolute;border-radius:50%;z-index:1;filter:blur(2px);opacity:0.5;
+        background:radial-gradient(circle at 35% 35%,rgba(255,255,255,0.9),rgba(46,196,182,0.25) 40%,transparent 70%);
+        animation:floaty 14s ease-in-out infinite;}
+      .bokeh.b1{width:26px;height:26px;left:12%;top:24%;animation-delay:0s;}
+      .bokeh.b2{width:14px;height:14px;left:78%;top:18%;animation-delay:-3s;opacity:0.35;}
+      .bokeh.b3{width:40px;height:40px;left:84%;top:62%;animation-delay:-6s;background:radial-gradient(circle at 35% 35%,rgba(255,195,0,0.7),rgba(255,195,0,0.18) 45%,transparent 70%);}
+      .bokeh.b4{width:18px;height:18px;left:20%;top:74%;animation-delay:-9s;opacity:0.4;}
+      .bokeh.b5{width:10px;height:10px;left:50%;top:12%;animation-delay:-5s;opacity:0.3;}
+      .bokeh.b6{width:30px;height:30px;left:8%;top:54%;animation-delay:-11s;background:radial-gradient(circle at 35% 35%,rgba(155,140,255,0.7),rgba(155,140,255,0.18) 45%,transparent 70%);}
+      @keyframes floaty{0%,100%{transform:translateY(0) translateX(0);}50%{transform:translateY(-46px) translateX(18px);}}
+      #vignette{position:absolute;inset:0;z-index:6;pointer-events:none;
+        background:radial-gradient(120% 90% at 50% 42%,transparent 52%,rgba(0,0,0,0.55) 100%);}
+      #film-grain{position:absolute;inset:0;z-index:7;pointer-events:none;opacity:0.05;mix-blend-mode:overlay;
+        background-image:radial-gradient(rgba(255,255,255,0.7) 0.5px,transparent 0.5px);background-size:3px 3px;}
+
+      /* ===== section (số thứ tự đỏ lớn + tiêu đề bold) ===== */
+      .section-h{font-size:104px;font-weight:900;letter-spacing:-2.5px;line-height:1.06;margin:0;max-width:1500px;
+        color:#fff;text-shadow:0 8px 40px rgba(0,0,0,0.45);}
+      .secnum{color:var(--red);text-shadow:0 6px 30px rgba(255,90,106,0.45);}
+      .section-sub{font-size:36px;font-weight:600;color:var(--muted);margin-top:32px;max-width:1200px;line-height:1.4;}
+
+      /* ===== quote (thẻ kính mờ + ngoặc kép trang trí) ===== */
+      .quote-card{position:relative;max-width:1180px;padding:80px 92px;border-radius:34px;text-align:center;
+        background:linear-gradient(160deg,rgba(30,52,82,0.55),rgba(10,22,38,0.5));
+        border:1px solid rgba(255,255,255,0.12);box-shadow:0 40px 120px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);
+        backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+      .quote-badge{display:inline-block;font-size:18px;font-weight:800;letter-spacing:5px;text-transform:uppercase;
+        color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+        border-radius:999px;padding:9px 22px;margin-bottom:30px;}
+      .quote-text{font-size:54px;font-weight:800;line-height:1.32;letter-spacing:-0.5px;color:#fff;}
+      .quote-by{font-size:30px;font-weight:600;color:var(--teal);margin-top:30px;}
+      .qmark{position:absolute;font-family:Georgia,serif;font-size:170px;line-height:1;color:rgba(46,196,182,0.35);}
+      .qmark-top{top:14px;left:34px;}
+      .qmark-bot{bottom:-44px;right:40px;color:rgba(255,195,0,0.32);}
+
+      /* ===== prompt (khung mẫu prompt hiển thị nguyên văn) ===== */
+      .promptbox{width:100%;max-width:1200px;margin-top:30px;border-radius:24px;overflow:hidden;text-align:left;
+        background:linear-gradient(180deg,rgba(13,27,42,0.92),rgba(8,16,28,0.92));
+        border:1px solid rgba(255,255,255,0.12);box-shadow:0 36px 110px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.06);}
+      .pb-bar{display:flex;align-items:center;gap:12px;padding:18px 26px;border-bottom:1px solid rgba(255,255,255,0.08);
+        background:rgba(255,255,255,0.03);}
+      .pb-dot{width:15px;height:15px;border-radius:50%;flex:none;}
+      .pb-dot.r{background:#ff5f57;} .pb-dot.y{background:#febc2e;} .pb-dot.g{background:#28c840;}
+      .pb-tag{margin-left:10px;font-size:18px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:var(--teal);}
+      .pb-copy{margin-left:auto;font-size:18px;font-weight:600;color:var(--muted);background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:7px 16px;}
+      .pb-body{padding:34px 40px;font-size:34px;line-height:1.55;color:#eaf2ff;white-space:pre-wrap;word-break:break-word;
+        font-family:"DejaVu Sans Mono","Consolas",ui-monospace,monospace;}
+      .pb-note{font-size:26px;color:var(--muted);margin-top:22px;max-width:1100px;line-height:1.4;}
+
+      /* ===== popup (thẻ ví dụ/nguồn bật lên) ===== */
+      .popups{display:flex;flex-direction:column;gap:22px;margin-top:44px;max-width:1280px;width:100%;text-align:left;}
+      .popup-card{display:flex;align-items:flex-start;gap:22px;position:relative;
+        background:linear-gradient(150deg,rgba(30,52,82,0.6),rgba(12,24,40,0.55));
+        border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:26px 30px;
+        box-shadow:0 26px 70px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.07);backdrop-filter:blur(10px);}
+      .popup-card .pc-ic{font-size:42px;flex:none;width:60px;height:60px;border-radius:14px;display:flex;align-items:center;
+        justify-content:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);}
+      .pc-body{flex:1;}
+      .pc-title{font-size:32px;font-weight:800;color:#fff;line-height:1.25;}
+      .pc-text{font-size:26px;color:var(--muted);margin-top:8px;line-height:1.45;}
+      .pc-tag{flex:none;align-self:center;font-size:19px;font-weight:700;color:var(--teal);
+        background:rgba(46,196,182,0.12);border:1px solid rgba(46,196,182,0.4);border-radius:999px;padding:7px 16px;}
+
+      /* ===== Phụ đề karaoke dưới cùng ===== */
+      #caption-layer{position:absolute;left:0;right:0;bottom:96px;z-index:8;display:flex;justify-content:center;pointer-events:none;}
+      .cap{position:absolute;opacity:0;max-width:1360px;text-align:center;font-size:40px;font-weight:800;line-height:1.3;
+        color:#fff;text-shadow:0 4px 24px rgba(0,0,0,0.8);padding:0 60px;}
+      .cap-hl{color:var(--red);}
+
+      /* Portrait overrides (9:16) */
+      .portrait .section-h{font-size:78px;max-width:920px;}
+      .portrait .section-sub{font-size:30px;}
+      .portrait .quote-card{max-width:920px;padding:56px 56px;border-radius:28px;}
+      .portrait .quote-text{font-size:44px;}
+      .portrait .quote-by{font-size:26px;}
+      .portrait .qmark{font-size:120px;}
+      .portrait #caption-layer{bottom:150px;}
+      .portrait .cap{font-size:38px;max-width:920px;}
+      .portrait .promptbox{max-width:940px;}
+      .portrait .pb-body{font-size:30px;padding:28px 32px;}
+      .portrait .pb-tag,.portrait .pb-copy{font-size:16px;}
+      .portrait .popups{max-width:940px;gap:18px;}
+      .portrait .popup-card{padding:20px 24px;gap:18px;}
+      .portrait .pc-ic{font-size:34px;width:52px;height:52px;}
+      .portrait .pc-title{font-size:28px;}
+      .portrait .pc-text{font-size:23px;}
+      .portrait .pc-tag{font-size:17px;}
+
       /* Portrait overrides (9:16) */
       .portrait .scene { padding: 120px 80px; }
       .portrait .heading { font-size: 52px; max-width: 920px; }
@@ -464,7 +702,12 @@ export function buildComposition({
     <div id="frame" data-composition-id="${esc(id)}" data-width="${capW}" data-height="${capH}" data-start="0" data-duration="${TOTAL}">
     <div id="stage" class="${isPortrait ? "portrait" : ""}">
       <div id="bg-glow"></div>
+      <div class="bokeh b1"></div><div class="bokeh b2"></div><div class="bokeh b3"></div>
+      <div class="bokeh b4"></div><div class="bokeh b5"></div><div class="bokeh b6"></div>
 ${sectionsHtml}
+      <div id="caption-layer">${caps.html}</div>
+      <div id="vignette"></div>
+      <div id="film-grain"></div>
 
       <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
       <script>

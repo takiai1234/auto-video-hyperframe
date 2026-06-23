@@ -23,7 +23,7 @@ const defaults = {
   vbee: {
     appId: process.env.VBEE_APP_ID || "",
     token: process.env.VBEE_TOKEN || "",
-    baseUrl: process.env.VBEE_BASE_URL || "https://vbee.vn/api/v1",
+    baseUrl: process.env.VBEE_BASE_URL || "https://vbee.vn/api/v1/tts",
     bitrate: Number(process.env.VBEE_BITRATE || 128),
     speedRate: process.env.VBEE_SPEED_RATE || "1.0",
     responseType: process.env.VBEE_RESPONSE_TYPE || "indirect",
@@ -32,7 +32,7 @@ const defaults = {
   },
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || "",
-    model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+    model: process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.6",
   },
   // Prompt cho AI sinh kịch bản - sửa được trên giao diện, khôi phục được mặc định.
   prompts: {

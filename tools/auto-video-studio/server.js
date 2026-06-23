@@ -6,6 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { listMusic, syncFromDrive, parseDriveFolderId, removeMusic } from "./src/music.js";
+import { publicThemes, publicFonts } from "./src/themes.js";
 import {
   publicVbee,
   setVbeeConfig,
@@ -52,6 +53,8 @@ app.get("/api/meta", (req, res) => {
     prompts: publicPrompts(),
     heygen: publicHeygen(),
     music: listMusic(),
+    themes: publicThemes(),
+    fonts: publicFonts(),
     queue: queueStats(),
   });
 });
@@ -79,9 +82,10 @@ app.get("/api/events", (req, res) => {
 
 // ---- Tạo / sửa / xoá task ----
 app.post("/api/tasks", (req, res) => {
-  const { topic, content, approved, voiceRef, music, autogen, aspectRatio, mode } = req.body || {};
+  const { topic, content, approved, voiceRef, music, autogen, aspectRatio, mode, theme, font } =
+    req.body || {};
   if (!topic && !content) return res.status(400).json({ error: "Cần chủ đề hoặc nội dung." });
-  const t = addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode });
+  const t = addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode, theme, font });
   res.json({ task: t });
 });
 
@@ -89,7 +93,7 @@ app.patch("/api/tasks/:id", (req, res) => {
   const t = getTask(req.params.id);
   if (!t) return res.status(404).json({ error: "Không tìm thấy task." });
   const allowed = {};
-  for (const k of ["topic", "content", "voiceRef", "music", "aspectRatio", "mode"]) {
+  for (const k of ["topic", "content", "voiceRef", "music", "aspectRatio", "mode", "theme", "font"]) {
     if (k in (req.body || {})) allowed[k] = req.body[k];
   }
   if ("approved" in (req.body || {})) allowed.approved = req.body.approved === true;
@@ -110,7 +114,7 @@ app.post("/api/clear", (req, res) => {
 
 // ---- Áp dụng voice/nhạc hàng loạt ----
 app.post("/api/bulk", (req, res) => {
-  const { voiceRef, aspectRatio, music, mode, onlyApproved } = req.body || {};
+  const { voiceRef, aspectRatio, music, mode, theme, font, onlyApproved } = req.body || {};
   let n = 0;
   for (const t of listTasks()) {
     if (onlyApproved && t.approved !== true) continue;
@@ -119,6 +123,8 @@ app.post("/api/bulk", (req, res) => {
     if (aspectRatio) patch.aspectRatio = aspectRatio;
     if (music) patch.music = music;
     if (mode) patch.mode = mode === "heygen" ? "heygen" : "hyperframe";
+    if (theme) patch.theme = theme;
+    if (font) patch.font = font;
     if (Object.keys(patch).length) {
       updateTask(t.id, patch);
       n++;
@@ -246,6 +252,8 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
           music: req.body.music || "random",
           aspectRatio: req.body.aspectRatio || "16:9",
           mode: req.body.mode || "hyperframe",
+          theme: req.body.theme || "midnight",
+          font: req.body.font || "auto",
         }),
       );
     }
@@ -343,4 +351,12 @@ app.listen(PORT, () => {
   console.log(
     "  Giọng đọc: Vbee (API). Lịch sử task lưu tại data/tasks.json (tự xoá sau 7 ngày).\n",
   );
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  if (maj < 20 || (maj === 20 && min < 12)) {
+    console.warn(
+      `  ⚠ CẢNH BÁO: Node v${process.versions.node} QUÁ CŨ cho bước render (cần >= 20.12, nên 22).\n` +
+        `    UI vẫn chạy nhưng RENDER SẼ LỖI ("npx exit 1"). Hãy chạy bằng Node 22:\n` +
+        `    nvm install 22 && nvm use 22 && npm start   (hoặc: bash setup.sh)\n`,
+    );
+  }
 });

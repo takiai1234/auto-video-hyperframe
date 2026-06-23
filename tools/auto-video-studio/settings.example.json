@@ -3,7 +3,7 @@
   "vbee": {
     "appId": "",
     "token": "",
-    "baseUrl": "https://vbee.vn/api/v1",
+    "baseUrl": "https://vbee.vn/api/v1/tts",
     "bitrate": 128,
     "speedRate": "1.0",
     "responseType": "indirect",
@@ -14,6 +14,6 @@
   },
   "openrouter": {
     "apiKey": "",
-    "model": "openai/gpt-4o-mini"
+    "model": "openai/gpt-4.1-mini"
   }
 }

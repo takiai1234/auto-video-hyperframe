@@ -1,24 +1,44 @@
 // Sinh "kịch bản phân cảnh đa layout" (90-180s) từ chủ đề/nội dung, qua OpenRouter (ChatGPT).
 // SYSTEM prompt + template lời nhắc người dùng sửa được trên giao diện (xem src/prompts.js + settings.js).
 import { getOpenrouterConfig, getPromptsConfig } from "./settings.js";
+import { preferForMedia } from "./themes.js";
 import { renderUserPrompt, OUTPUT_CONTRACT } from "./prompts.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
-export async function generateScript(topic, { apiKey, model, guidance } = {}) {
+// Hướng dẫn BỐ CỤC theo "tính cách" của mẫu đang chọn -> mỗi mẫu sinh layout khác nhau.
+const MEDIA_GUIDE = {
+  image:
+    'Mẫu này THIÊN VỀ HÌNH ẢNH/DẪN CHỨNG TRỰC QUAN. ƯU TIÊN dựng "ảnh thực tế" SÁT nội dung bằng HTML: layout "code" (đoạn mã/câu lệnh), "browser" (mockup trang web/bài báo: đặt url + heading + text + tag callout). CHỈ dùng "photo" (kèm "query" tiếng Anh) tối đa 1-2 cảnh khi chủ đề có vật thể thật cần thấy. HẠN CHẾ gallery/ảnh stock chung chung.',
+  diagram:
+    "Mẫu này THIÊN VỀ SƠ ĐỒ: trực quan hoá bằng flow/loop/steps/bars/timeline/roadmap/compare/pros/formula; tối thiểu 3 cảnh là sơ đồ; hạn chế cảnh chỉ-chữ.",
+  stat: "Mẫu này NHẤN MẠNH SỐ LIỆU: dùng nhiều stat/bars, mỗi con số có ngữ cảnh rõ.",
+  text: "Mẫu này CÔ ĐỌNG, MẠNH VỀ CHỮ: ưu tiên statement/quote/cards với câu chốt sắc; hạn chế ảnh.",
+  mixed:
+    'Mẫu này CÂN BẰNG: đa dạng layout, có cả chữ, sơ đồ và 1-2 ảnh thật (kèm "query" tiếng Anh).',
+};
+function layoutBiasMsg(media) {
+  if (!media) return "";
+  const prefer = preferForMedia(media);
+  return `=== PHONG CÁCH BỐ CỤC VIDEO NÀY (ưu tiên cao) ===\n${MEDIA_GUIDE[media] || MEDIA_GUIDE.mixed}\nƯu tiên các layout: ${prefer.join(", ")}. Vẫn ĐA DẠNG (>=5 layout khác nhau) và đúng schema.`;
+}
+
+export async function generateScript(topic, { apiKey, model, guidance, media } = {}) {
   const cfg = getOpenrouterConfig();
   const { system, userTemplate } = getPromptsConfig();
   const key = apiKey || cfg.apiKey;
-  const mdl = model || cfg.model || "openai/gpt-4o-mini";
+  const mdl = model || cfg.model || "anthropic/claude-sonnet-4.6";
   if (!key) throw new Error("Chưa cấu hình OpenRouter API key.");
   if (!topic && !guidance) throw new Error("Cần chủ đề hoặc nội dung để sinh kịch bản.");
 
   // Prompt người dùng (phong cách/nội dung tuỳ ý) + HỢP ĐỒNG ĐỊNH DẠNG ĐẦU RA luôn được nhồi
   // sau cùng -> dù người dùng viết prompt thế nào, đầu ra vẫn đúng schema bộ dựng hiểu được.
   // OUTPUT_CONTRACT có chữ "json" nên cũng thoả điều kiện response_format json_object (tránh lỗi 400).
+  const bias = layoutBiasMsg(media);
   const messages = [
     { role: "system", content: system },
     { role: "user", content: renderUserPrompt(userTemplate, topic, guidance) },
+    ...(bias ? [{ role: "system", content: bias }] : []),
     { role: "system", content: OUTPUT_CONTRACT },
   ];
 
@@ -116,6 +136,18 @@ function normalizeScene(s) {
   // text giữ NGUYÊN xuống dòng (layout "prompt" hiển thị mẫu prompt nhiều dòng).
   if (s.text) out.text = cleanMultiline(s.text);
   if (s.num != null && s.num !== "") out.num = clean(s.num);
+  if (s.value != null && s.value !== "") out.value = clean(s.value); // bignum
+  if (s.term) out.term = clean(s.term); // definition
+  if (s.code) out.code = cleanMultiline(s.code); // code (giữ xuống dòng)
+  if (s.html) out.html = String(s.html); // custom (HTML do AI sinh, composition tự lọc)
+  if (s.url) out.url = clean(s.url); // browser
+  if (s.center) out.center = clean(s.center); // loop (nhãn giữa)
+  if (s.tag) out.tag = clean(s.tag); // browser callout
+  if (s.body) out.body = clean(s.body); // mô tả (split/point)
+  // Ảnh: 'query' = từ khoá tìm ảnh thật (pipeline tự tải); 'images' = list query/ảnh cho gallery.
+  if (s.query) out.query = clean(s.query);
+  if (s.image) out.image = String(s.image).trim();
+  if (Array.isArray(s.images)) out.images = s.images;
   if (s.caption)
     out.caption = String(s.caption)
       .replace(/[ \t]+/g, " ")

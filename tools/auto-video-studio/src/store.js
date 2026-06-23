@@ -106,7 +106,18 @@ export function getTask(id) {
   return tasks.get(id);
 }
 
-export function addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode }) {
+export function addTask({
+  topic,
+  content,
+  approved,
+  voiceRef,
+  music,
+  autogen,
+  aspectRatio,
+  mode,
+  theme,
+  font,
+}) {
   const id = String(++seq);
   const c = (content || "").trim();
   const t = {
@@ -119,6 +130,8 @@ export function addTask({ topic, content, approved, voiceRef, music, autogen, as
     music: music || "random",
     aspectRatio: aspectRatio || "16:9",
     mode: mode === "heygen" ? "heygen" : "hyperframe", // hyperframe | heygen (ghép avatar)
+    theme: theme || "midnight", // mẫu giao diện (xem src/themes.js)
+    font: font || "auto", // font chữ override (auto = theo mẫu); xem FONTS trong src/themes.js
     status: "idle", // idle | queued | running | done | error
     phase: "",
     percent: 0,
@@ -225,6 +238,8 @@ async function runTask(t) {
         music: t.music,
         aspectRatio: t.aspectRatio,
         mode: t.mode,
+        theme: t.theme,
+        font: t.font,
       },
       (p) => updateTask(t.id, { phase: p.phase, percent: p.percent, detail: p.detail || "" }),
     );

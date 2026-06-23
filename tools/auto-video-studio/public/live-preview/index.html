@@ -1,0 +1,25 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>AutoVideo - Live preview</title>
+<style>
+ body{margin:0;font-family:Inter,system-ui,sans-serif;background:#0b1220;color:#e8eefc;padding:18px;}
+ h1{font-size:18px;margin:0 0 12px;} .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+ select{font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid #2a3a55;background:#16243a;color:#e8eefc;max-width:620px;}
+ small{opacity:.65;}
+ .stage{display:flex;justify-content:center;background:#05080f;border:1px solid #233;border-radius:12px;padding:16px;}
+ .frame-wrap{position:relative;overflow:hidden;background:#000;border-radius:8px;}
+ .frame-wrap.wide{width:min(1100px,90vw);aspect-ratio:16/9;}
+ .frame-wrap.tall{height:min(70vh,720px);aspect-ratio:9/16;}
+ iframe{border:0;position:absolute;top:0;left:0;transform-origin:top left;}
+</style></head>
+<body><h1>🎬 Live preview - moi mau co LAYOUT + format rieng (timeline tu chay, lap)</h1>
+<div class="bar"><label>Mau: <select id="m"><option value="_media-demo">★ Demo TONG HOP (anh + so do)</option><option value="midnight">Midnight - Xanh navy · teal/vàng (mặc định)</option><option value="noir-amber">Noir Amber - Đen · cam hổ phách ấm</option><option value="royal-gold">Royal Gold - Sang trọng · vàng kim</option><option value="emerald">Emerald - Xanh lục ngọc · lime</option><option value="crimson">Crimson - Than chì · đỏ rượu</option><option value="cyber-violet">Cyber Violet - Tím/hồng neon</option><option value="deep-ocean">Deep Ocean - Xanh biển sâu · cyan</option><option value="sunset">Sunset - Hoàng hôn · cam/hồng</option><option value="slate-pro">Slate Pro - Tối giản công sở · xanh dương</option><option value="mocha">Mocha - Nâu ấm · caramel/kem</option><option value="neo-brutal">Neo Brutal - Brutalism · vàng điện + viền đen dày</option><option value="vaporwave">Vaporwave - Retro 80s · lưới hoàng hôn neon</option><option value="y2k-aero">Y2K Aero - Glossy 2000s · aqua bóng kính</option><option value="editorial">Editorial - Tạp chí cao cấp · serif giấy kem</option><option value="aurora-mesh">Aurora Mesh - Gradient mesh SaaS · cực quang</option><option value="pop-comic">Pop Comic - Comic pop-art · halftone & outline</option><option value="neon-glow">Neon Glow - Cyberpunk · chữ phát sáng trên đen</option><option value="swiss-mono">Swiss Mono - Tối giản Thuỵ Sĩ · đen trắng + đỏ</option><option value="frost-glass">Frost Glass - Glassmorphism · kính mờ trên blob màu</option><option value="blueprint">Blueprint - Bản vẽ kỹ thuật · lưới cyan + mono</option></select></label>
+<label>Ti le: <select id="r"><option value="wide">16:9</option><option value="tall">9:16</option></select></label>
+<small>Moi mau dung bo canh theo tinh cach: image / diagram / stat / text / mixed.</small></div>
+<div class="stage"><div class="frame-wrap wide" id="wrap"><iframe id="f" src="_media-demo-wide.html"></iframe></div></div>
+<script>
+ var m=document.getElementById("m"),r=document.getElementById("r"),f=document.getElementById("f"),wrap=document.getElementById("wrap");
+ function fit(){var tall=r.value==="tall";var W=tall?1080:1920,H=tall?1920:1080;f.style.width=W+"px";f.style.height=H+"px";
+   var s=Math.min(wrap.clientWidth/W,wrap.clientHeight/H);f.style.transform="scale("+s+")";
+   f.style.left=((wrap.clientWidth-W*s)/2)+"px";f.style.top=((wrap.clientHeight-H*s)/2)+"px";}
+ function upd(){wrap.className="frame-wrap "+r.value;f.src=m.value+"-"+r.value+".html";requestAnimationFrame(fit);}
+ m.onchange=upd;r.onchange=upd;window.onresize=fit;f.onload=fit;requestAnimationFrame(fit);
+</script></body></html>

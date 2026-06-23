@@ -17,38 +17,13 @@
           <div class="badge-stat"><b id="q-running">0</b>đang chạy</div>
           <div class="badge-stat"><b id="q-waiting">0</b>chờ</div>
           <div class="badge-stat"><b id="q-conc">2</b>song song</div>
+          <button class="primary sm" id="btn-cfg" title="Tất cả cấu hình: OpenRouter, Vbee, HeyGen, Drive, prompt, luồng">⚙ Cấu hình</button>
           <button class="ghost danger sm" id="btn-shutdown" title="Dừng hẳn tool (tool đang chạy ngầm)">⏻ Tắt tool</button>
         </div>
       </header>
 
       <div id="voice-warn" class="banner" style="display:none">
-        ⚠ Chưa có giọng nào. Hãy <b>cấu hình Vbee</b> ở phần "Cấu hình giọng" bên dưới.
-      </div>
-
-      <!-- API: OpenRouter (sinh nội dung) -->
-      <div class="card" style="margin-bottom: 16px;">
-        <h3>Sinh nội dung tự động - OpenRouter (ChatGPT)</h3>
-        <div class="row-inline">
-          <input type="password" id="or-key" placeholder="OpenRouter API key (sk-or-… ; để trống nếu không đổi)" style="flex:2; min-width: 240px;" />
-          <input type="text" id="or-model" placeholder="openai/gpt-4o-mini" style="flex:1; min-width: 160px;" />
-          <button class="primary" id="btn-or-save">Lưu</button>
-          <button class="sm" id="btn-or-test">Test sinh nội dung</button>
-          <span id="or-status" class="hint" style="margin:0;"></span>
-        </div>
-        <div class="hint">Bật <b>"Tự sinh nội dung (AI)"</b> ở ô Thêm task rồi chỉ cần nhập <b>chủ đề</b> → AI viết kịch bản 2–3 phút. Giọng đọc <b>liền mạch không ngắt nghỉ</b>, các frame chỉ minh hoạ chạy song song.</div>
-
-        <details class="prompts" style="margin-top:12px;">
-          <summary>✏️ Sửa prompt AI (master prompt + lời nhắc) <span id="pr-status" class="hint" style="margin:0;"></span></summary>
-          <label style="margin-top:10px;">SYSTEM prompt (vai trò đạo diễn + luật + schema layout)</label>
-          <textarea id="pr-system" class="mono" rows="14" spellcheck="false"></textarea>
-          <label>Template lời nhắc người dùng <span style="color:var(--muted)">(dùng <code>{{topic}}</code> và <code>{{guidance}}</code>)</span></label>
-          <textarea id="pr-user" class="mono" rows="4" spellcheck="false"></textarea>
-          <div class="row-inline" style="margin-top:10px;">
-            <button class="primary" id="btn-pr-save">Lưu prompt</button>
-            <button class="sm ghost" id="btn-pr-reset">Khôi phục mặc định</button>
-            <span class="hint" style="margin:0;"><code>{{topic}}</code> = chủ đề, <code>{{guidance}}</code> = nội dung/dàn ý (tự bỏ nếu trống).</span>
-          </div>
-        </details>
+        ⚠ Chưa có giọng nào. Mở <b>⚙ Cấu hình</b> (góc trên phải) → mục <b>Vbee</b> để thêm giọng.
       </div>
 
       <!-- Hàng 1: Thêm task + Excel/Drive -->
@@ -82,6 +57,30 @@
               <label class="checkbox"><input type="checkbox" id="f-approved" checked /> Đã duyệt</label>
             </div>
           </div>
+          <label style="margin-top:12px;">Mẫu giao diện <span style="color:var(--muted)">(mỗi ô tự chạy demo động - màu/skin cố định, còn format chuyển cảnh + chữ + nhịp đổi NGẪU NHIÊN mỗi lần render)</span></label>
+          <div class="theme-grid" id="theme-grid"></div>
+
+          <!-- Xem trước ĐỘNG mẫu đang chọn (đúng khung engine chụp thành video) -->
+          <div class="theme-preview" id="theme-preview">
+            <div class="tp-head">
+              <span class="hint" style="margin:0;">▶ Xem trước: <b id="tp-name">Midnight</b></span>
+              <span class="tp-ratio" id="tp-ratio">
+                <button type="button" class="sm" data-ratio="wide">16:9</button>
+                <button type="button" class="sm ghost" data-ratio="tall">9:16</button>
+              </span>
+            </div>
+            <div class="tp-wrap wide" id="tp-wrap"><iframe id="tp-frame" title="Xem trước mẫu"></iframe></div>
+          </div>
+
+          <label style="margin-top:12px;">Phông chữ <span style="color:var(--muted)">(font Việt hoá, dễ đọc; "Theo mẫu" = giữ font của mẫu)</span></label>
+          <div class="row-inline" style="margin-top:6px;">
+            <select id="font-pick" style="flex:1; min-width:220px;" title="Chọn phông chữ cho video"></select>
+          </div>
+          <div id="font-preview" class="font-preview" title="Xem trước phông chữ">
+            <div class="fp-big">Tiêu đề nổi bật</div>
+            <div class="fp-sm">Ăn quả nhớ kẻ trồng cây. Đầy đủ dấu tiếng Việt: ăâ êô ơư đ. AĂÂEÊ 0123456789</div>
+          </div>
+
           <div class="row2" style="margin-top: 12px;">
             <button class="primary" id="btn-add" title="Chỉ slide Hyperframe + giọng + nhạc">➕ Hyperframe</button>
             <button class="amber" id="btn-add-heygen" title="Ghép thêm avatar HeyGen nói (chia đôi khung)">➕ Hyperframe + HeyGen</button>
@@ -97,64 +96,12 @@
             <input type="file" id="f-file" accept=".xlsx,.xls,.csv" style="flex:1; min-width: 180px;" />
             <button id="btn-upload">Tải lên</button>
           </div>
-          <div class="hint">Giọng/nhạc/tỷ lệ của các dòng nhập từ Excel sẽ lấy theo lựa chọn ở ô "Thêm task".</div>
-
-          <div class="divider"></div>
-          <h3>Kho nhạc Google Drive (tuỳ chọn)</h3>
-          <input type="text" id="d-url" placeholder="https://drive.google.com/drive/folders/XXXX" />
-          <div class="row2" style="margin-top: 8px;">
-            <input type="text" id="d-key" placeholder="Google Drive API key" />
-            <button id="btn-drive">Đồng bộ nhạc</button>
-          </div>
+          <div class="hint">Giọng/nhạc/tỷ lệ của các dòng nhập từ Excel sẽ lấy theo lựa chọn ở ô "Thêm task". Đồng bộ nhạc từ Google Drive ở <b>⚙ Cấu hình</b>.</div>
 
           <div class="divider"></div>
           <h3>Nhạc hiện có (bấm ✕ để xoá)</h3>
           <div id="music-list" class="taglist"></div>
         </div>
-      </div>
-
-      <!-- Hàng 2: Cấu hình giọng Vbee -->
-      <div class="card" style="margin-bottom: 18px;">
-        <h3>Giọng đọc - Vbee (API)</h3>
-        <div class="row2">
-          <div><label>App ID</label><input type="text" id="vb-app" placeholder="app_id" /></div>
-          <div><label>Access Token</label><input type="password" id="vb-token" placeholder="để trống nếu không đổi" /></div>
-        </div>
-        <label>Base URL (mặc định)</label>
-        <input type="text" id="vb-base" placeholder="https://vbee.vn/api/v1" />
-        <div class="row-inline" style="margin-top: 10px;">
-          <button class="primary" id="btn-vb-save">Lưu cấu hình</button>
-          <span id="vb-status" class="hint" style="margin:0;"></span>
-        </div>
-
-        <div class="divider"></div>
-        <label>Danh sách giọng Vbee (voice_code → tên hiển thị)</label>
-        <div id="vb-voices" class="taglist"></div>
-        <div class="row-inline" style="margin-top: 8px;">
-          <input type="text" id="vb-new-code" placeholder="voice_code (vd hn_male_..._48k-fhg)" style="flex:2; min-width:160px;" />
-          <input type="text" id="vb-new-label" placeholder="tên hiển thị" style="flex:1; min-width:120px;" />
-          <button class="sm" id="btn-vb-addvoice">＋</button>
-        </div>
-        <div class="row-inline" style="margin-top: 10px;">
-          <select id="vb-test-voice" style="flex:1;"></select>
-          <button class="sm" id="btn-vb-test">Test giọng Vbee</button>
-        </div>
-        <div class="hint">Lấy <b>voice_code</b> chính xác trong dashboard Vbee của bạn. Endpoint có thể chỉnh ở Base URL nếu gói của bạn khác.</div>
-      </div>
-
-      <!-- Cấu hình HeyGen (chế độ ghép avatar) -->
-      <div class="card" style="margin-bottom: 18px;">
-        <h3>Avatar nói - HeyGen (chế độ ghép)</h3>
-        <div class="row2">
-          <div><label>HeyGen API key</label><input type="password" id="hg-key" placeholder="để trống nếu không đổi" /></div>
-          <div><label>avatar_id <span style="color:var(--muted)">(nhiều cái cách nhau bằng dấu phẩy/xuống dòng → chọn ngẫu nhiên)</span></label><input type="text" id="hg-avatar" placeholder="vd: Daisy-inskirt-20220818, ..." /></div>
-        </div>
-        <div class="row-inline" style="margin-top: 10px;">
-          <button class="primary" id="btn-hg-save">Lưu cấu hình</button>
-          <button class="sm" id="btn-hg-test">Test HeyGen</button>
-          <span id="hg-status" class="hint" style="margin:0;"></span>
-        </div>
-        <div class="hint">Giọng đọc dùng <b>Vbee</b> (gửi URL audio sang HeyGen). Nền avatar đặt = màu nền tối của slide để hoà liền mạch. Chỉ task tạo bằng nút <b>"➕ Hyperframe + HeyGen"</b> mới dùng phần này.</div>
       </div>
 
       <!-- Thanh điều khiển hàng loạt -->
@@ -164,20 +111,14 @@
           <select id="bulk-vref"><option value="">- Giọng -</option></select>
           <select id="bulk-aspect"><option value="">- Tỷ lệ -</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select>
           <select id="bulk-mode"><option value="">- Chế độ -</option><option value="hyperframe">Hyperframe</option><option value="heygen">Hyperframe + HeyGen</option></select>
+          <select id="bulk-theme"><option value="">- Mẫu -</option></select>
+          <button class="sm ghost" id="btn-bulk-preview" title="Xem trước mẫu đang chọn ở ô áp dụng">👁 Xem</button>
+          <select id="bulk-font"><option value="">- Font -</option></select>
           <select id="bulk-music"><option value="">- Nhạc -</option></select>
           <label class="checkbox"><input type="checkbox" id="bulk-approved-only" /> chỉ task đã duyệt</label>
           <button class="sm" id="btn-bulk">Áp dụng</button>
         </div>
         <div class="right">
-          <label class="conc" title="Số video render cùng lúc (tối đa 5)">⚙ Luồng
-            <select id="sel-conc">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-          </label>
           <button class="sm" id="btn-download-all" title="Tải mọi video đã hoàn tất">⬇ Tải tất cả</button>
           <button class="ghost danger sm" id="btn-clear">Xoá tất cả</button>
           <button class="amber" id="btn-runall">▶ Chạy tất cả đã duyệt</button>
@@ -195,19 +136,127 @@
               <th>Chế độ</th>
               <th>Giọng</th>
               <th>Tỷ lệ</th>
+              <th>Mẫu</th>
+              <th>Font</th>
               <th>Nhạc</th>
               <th>Trạng thái</th>
               <th>Hành động</th>
             </tr>
           </thead>
           <tbody id="rows">
-            <tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>
+            <tr><td colspan="12" style="text-align:center; color: var(--muted); padding: 30px;">Chưa có task nào.</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
     <div id="toast"></div>
+
+    <!-- ===== POPUP CẤU HÌNH (gộp tất cả) ===== -->
+    <div class="modal" id="cfg-modal">
+      <div class="box cfg-box">
+        <div class="mhead cfg-head">
+          <b>⚙ Cấu hình</b>
+          <input type="text" id="cfg-search" placeholder="🔎 Tìm cấu hình… (vd: vbee, key, model, heygen, drive, luồng)" />
+          <button class="sm ghost" id="cfg-close">Đóng ✕</button>
+        </div>
+        <div class="cfg-body">
+
+          <section class="cfg-section" data-keys="openrouter chatgpt ai sinh nội dung api key model gpt prompt kịch bản sonnet opus claude 4.1 mini">
+            <h3>🤖 OpenRouter (sinh nội dung AI)</h3>
+            <div class="row-inline">
+              <input type="password" id="or-key" placeholder="OpenRouter API key (sk-or-… ; để trống nếu không đổi)" style="flex:2; min-width: 240px;" />
+              <select id="or-model" style="flex:1; min-width: 220px;" title="Chọn model sinh kịch bản + HTML">
+                <option value="anthropic/claude-sonnet-4.6">Sonnet 4.6 (cân bằng, khuyên dùng. Khoảng 0.08 USD/video)</option>
+                <option value="anthropic/claude-opus-4.8">Opus 4.8 (chất lượng cao nhất. Khoảng 0.14 USD/video)</option>
+                <option value="openai/gpt-4.1-mini">GPT-4.1 mini (rẻ, nhanh. Khoảng 0.01 USD/video)</option>
+              </select>
+              <button class="primary" id="btn-or-save">Lưu</button>
+              <button class="sm" id="btn-or-test">Test</button>
+              <span id="or-status" class="hint" style="margin:0;"></span>
+            </div>
+            <div class="hint">Bật <b>"Tự sinh nội dung (AI)"</b> ở ô Thêm task, nhập <b>chủ đề</b> → AI viết kịch bản. Model mặc định <code>anthropic/claude-sonnet-4.6</code> (đẹp/sáng tạo hơn cho HTML). Đổi sang Opus 4.8 cho video quan trọng, hoặc GPT-4.1 mini để tiết kiệm.</div>
+            <details class="prompts" style="margin-top:12px;">
+              <summary>✏️ Sửa prompt AI (master prompt + lời nhắc) <span id="pr-status" class="hint" style="margin:0;"></span></summary>
+              <label style="margin-top:10px;">SYSTEM prompt (vai trò đạo diễn + luật + schema layout)</label>
+              <textarea id="pr-system" class="mono" rows="12" spellcheck="false"></textarea>
+              <label>Template lời nhắc người dùng <span style="color:var(--muted)">(dùng <code>{{topic}}</code> và <code>{{guidance}}</code>)</span></label>
+              <textarea id="pr-user" class="mono" rows="4" spellcheck="false"></textarea>
+              <div class="row-inline" style="margin-top:10px;">
+                <button class="primary" id="btn-pr-save">Lưu prompt</button>
+                <button class="sm ghost" id="btn-pr-reset">Khôi phục mặc định</button>
+              </div>
+            </details>
+          </section>
+
+          <section class="cfg-section" data-keys="vbee giọng đọc tts api key app id token voice base url âm thanh">
+            <h3>🎙️ Vbee (giọng đọc tiếng Việt)</h3>
+            <div class="row2">
+              <div><label>App ID</label><input type="text" id="vb-app" placeholder="app_id" /></div>
+              <div><label>Access Token</label><input type="password" id="vb-token" placeholder="để trống nếu không đổi" /></div>
+            </div>
+            <label>Base URL</label>
+            <input type="text" id="vb-base" placeholder="https://vbee.vn/api/v1/tts" />
+            <div class="row-inline" style="margin-top: 10px;">
+              <button class="primary" id="btn-vb-save">Lưu cấu hình</button>
+              <span id="vb-status" class="hint" style="margin:0;"></span>
+            </div>
+            <div class="divider"></div>
+            <label>Danh sách giọng Vbee (voice_code → tên hiển thị)</label>
+            <div id="vb-voices" class="taglist"></div>
+            <div class="row-inline" style="margin-top: 8px;">
+              <input type="text" id="vb-new-code" placeholder="voice_code (vd hn_male_..._48k-fhg)" style="flex:2; min-width:160px;" />
+              <input type="text" id="vb-new-label" placeholder="tên hiển thị" style="flex:1; min-width:120px;" />
+              <button class="sm" id="btn-vb-addvoice">＋</button>
+            </div>
+            <div class="row-inline" style="margin-top: 10px;">
+              <select id="vb-test-voice" style="flex:1;"></select>
+              <button class="sm" id="btn-vb-test">Test giọng Vbee</button>
+            </div>
+          </section>
+
+          <section class="cfg-section" data-keys="heygen avatar nói api key ghép video chia khung">
+            <h3>🧑‍💼 HeyGen (avatar nói, chế độ ghép)</h3>
+            <div class="row2">
+              <div><label>HeyGen API key</label><input type="password" id="hg-key" placeholder="để trống nếu không đổi" /></div>
+              <div><label>avatar_id <span style="color:var(--muted)">(nhiều cái cách nhau dấu phẩy → chọn ngẫu nhiên)</span></label><input type="text" id="hg-avatar" placeholder="vd: Daisy-inskirt-20220818, ..." /></div>
+            </div>
+            <div class="row-inline" style="margin-top: 10px;">
+              <button class="primary" id="btn-hg-save">Lưu cấu hình</button>
+              <button class="sm" id="btn-hg-test">Test HeyGen</button>
+              <span id="hg-status" class="hint" style="margin:0;"></span>
+            </div>
+            <div class="hint">Giọng vẫn dùng <b>Vbee</b>. Chỉ task tạo bằng nút <b>"➕ Hyperframe + HeyGen"</b> mới dùng phần này.</div>
+          </section>
+
+          <section class="cfg-section" data-keys="google drive nhạc nền nhạc đồng bộ kho nhạc api key music">
+            <h3>🎵 Google Drive (kho nhạc nền)</h3>
+            <input type="text" id="d-url" placeholder="https://drive.google.com/drive/folders/XXXX" />
+            <div class="row2" style="margin-top: 8px;">
+              <input type="text" id="d-key" placeholder="Google Drive API key" />
+              <button id="btn-drive">Đồng bộ nhạc</button>
+            </div>
+            <div class="hint">Folder cần để "Anyone with the link". Nhạc tải về dùng làm nhạc nền (chọn ở ô Thêm task).</div>
+          </section>
+
+          <section class="cfg-section" data-keys="hệ thống luồng song song concurrency số video render độ phân giải 2k 4k chất lượng">
+            <h3>⚙️ Hệ thống</h3>
+            <label class="conc">Số video render song song (1-5)
+              <select id="sel-conc">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+            <div class="hint" style="margin-top:10px;">Độ phân giải đầu ra: <b>2K (2560×1440)</b> mặc định. Đổi qua biến môi trường <code>OUTPUT_SCALE</code> (1 = 1080p, 1.333 = 2K, 2 = 4K) khi khởi động tool.</div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
     <div class="modal" id="modal">
       <div class="box">
         <div class="mhead">

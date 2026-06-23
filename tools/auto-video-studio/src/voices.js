@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { synthesizeVbee } from "./vbee.js";
+import { FFPROBE, FFMPEG } from "./bin.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,15 +27,28 @@ export async function synthesizeWithUrl(text, voiceSpec, outBase) {
 }
 
 export async function audioDuration(filePath) {
-  const { stdout } = await execFileAsync("ffprobe", [
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "default=noprint_wrappers=1:nokey=1",
-    filePath,
-  ]);
-  const d = parseFloat(stdout.trim());
-  return Number.isFinite(d) ? d : 0;
+  // Ưu tiên ffprobe (chính xác, gọn). Nếu không có ffprobe -> fallback đo bằng ffmpeg.
+  try {
+    const { stdout } = await execFileAsync(FFPROBE, [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ]);
+    const d = parseFloat(stdout.trim());
+    if (Number.isFinite(d) && d > 0) return d;
+  } catch {
+    /* rơi xuống fallback ffmpeg */
+  }
+  // Fallback: ffmpeg in "Duration: HH:MM:SS.xx" ra stderr.
+  try {
+    await execFileAsync(FFMPEG, ["-hide_banner", "-i", filePath]);
+  } catch (e) {
+    const m = String(e?.stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + parseFloat(m[3]);
+  }
+  return 0;
 }

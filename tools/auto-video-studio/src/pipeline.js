@@ -6,11 +6,38 @@ import { fileURLToPath } from "node:url";
 
 import { generateScenes, scenesFromPlan } from "./scriptgen.js";
 import { buildComposition } from "./composition.js";
+import { themeBg, DEFAULT_THEME_ID, themeStyle, randomFormat } from "./themes.js";
 import { synthesize, synthesizeWithUrl, audioDuration } from "./voices.js";
 import { resolveMusic } from "./music.js";
 import { getVbeeConfig } from "./settings.js";
 import { generateScript } from "./openrouter.js";
 import { generateHeygenVideo } from "./heygen.js";
+import { fetchImage, creditLine } from "./images.js";
+import { FFMPEG, FFMPEG_DIR, FFPROBE_DIR } from "./bin.js";
+
+// Nhồi vào ĐẦU PATH:
+//  1) Thư mục Node ĐANG chạy server (process.execPath) -> tiến trình con `npx`/`node`
+//     (engine hyperframes dùng `#!/usr/bin/env node`) sẽ dùng ĐÚNG Node này, KHÔNG rơi về
+//     Node 18 hệ thống ở /usr/bin (nguyên nhân lỗi "npx exit 1 ... Node.js v18 / styleText").
+//  2) Thư mục ffmpeg/ffprobe (bundled) -> engine tìm thấy mà không cần cài hệ thống.
+// Tự dò Chrome để engine khỏi tải Chromium.
+(() => {
+  const nodeDir = path.dirname(process.execPath); // vd ~/.nvm/versions/node/v22.x/bin
+  const extra = [nodeDir, FFMPEG_DIR, FFPROBE_DIR].filter(Boolean).join(path.delimiter);
+  if (extra) process.env.PATH = extra + path.delimiter + (process.env.PATH || "");
+  if (!process.env.PUPPETEER_EXECUTABLE_PATH) {
+    const chromes = [
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    ];
+    const found = chromes.find((p) => fs.existsSync(p));
+    if (found) process.env.PUPPETEER_EXECUTABLE_PATH = found;
+  }
+})();
 
 function resolveVoiceLabel(ref) {
   const v = getVbeeConfig().voices.find((x) => x.code === ref);
@@ -31,6 +58,46 @@ const END_PAD = 0.8; // đệm cuối
 
 const HF_BIN = process.env.HYPERFRAMES_BIN || "npx";
 const HF_ARGS_PREFIX = process.env.HYPERFRAMES_BIN ? [] : ["--yes", "hyperframes@latest"];
+
+// ----- Chất lượng video khi ghép HeyGen (chống mờ) -----
+// Render HeyGen ở độ phân giải CAO hơn nửa khung rồi thu nhỏ bằng lanczos -> nét hơn,
+// giảm nhiễu nén. Giữ đúng tỷ lệ panel để khỏi crop-phóng-to (nguyên nhân chính gây mờ).
+const HEYGEN_SS = Number(process.env.HEYGEN_SUPERSAMPLE || 2); // bội số render (1 = tắt)
+const HEYGEN_MAX_DIM = Number(process.env.HEYGEN_MAX_DIM || 1920); // trần mỗi chiều (giới hạn HeyGen)
+const HEYGEN_PRESET = process.env.HEYGEN_PRESET || "slow"; // x264 preset (chất lượng > tốc độ)
+const HEYGEN_CRF = process.env.HEYGEN_CRF || "18"; // crf thấp = nét hơn
+
+const evenN = (n) => {
+  const v = Math.round(Number(n) || 0);
+  return v % 2 === 0 ? v : v + 1;
+};
+
+// ----- Độ phân giải đầu ra: TỐI THIỂU 2K -----
+// Thiết kế gốc 1920x1080 (16:9) / 1080x1920 (9:16). Scale 4/3 -> 2560x1440 / 1440x2560 = 2K (QHD).
+// Đặt OUTPUT_SCALE=2 để ra 4K (3840x2160). Engine render đúng cỡ khung -> nét (không upscale bitmap).
+const OUTPUT_SCALE = Math.max(1, Number(process.env.OUTPUT_SCALE || 4 / 3));
+// ----- Phóng to chữ cho dễ đọc -----
+// Chữ thường hơi nhỏ so với khung -> phóng nhẹ. HeyGen chỉ chiếm NỬA khung (chữ bị thu
+// thêm ~0.75x) -> phóng mạnh hơn nhiều để to, rõ. Tinh chỉnh qua env nếu cần.
+const TEXT_SCALE = Math.max(0.6, Number(process.env.TEXT_SCALE || 1.12));
+const HEYGEN_TEXT_SCALE = Math.max(0.6, Number(process.env.HEYGEN_TEXT_SCALE || 1.5));
+// Scale toàn bộ hình học chia khung HeyGen để khung cuối cũng đạt 2K.
+function scaleGeo(g, s) {
+  const e = (n) => evenN(n * s);
+  const sc = (o) => ({ x: e(o.x), y: e(o.y), w: e(o.w), h: e(o.h) });
+  return {
+    final: { w: evenN(g.final.w * s), h: evenN(g.final.h * s) },
+    hf: { ...sc(g.hf), design: g.hf.design },
+    hg: sc(g.hg),
+  };
+}
+
+// Kích thước yêu cầu HeyGen render: panel * bội số, cùng tỷ lệ, không vượt trần mỗi chiều.
+function heygenRequestDims(panelW, panelH) {
+  let f = Math.max(1, HEYGEN_SS);
+  f = Math.min(f, HEYGEN_MAX_DIM / panelW, HEYGEN_MAX_DIM / panelH);
+  return { w: evenN(panelW * f), h: evenN(panelH * f) };
+}
 
 function run(cmd, args, { cwd, onLine, shell = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -58,7 +125,27 @@ function run(cmd, args, { cwd, onLine, shell = false } = {}) {
   });
 }
 
-const ffmpeg = (args, opts) => run("ffmpeg", ["-y", ...args], opts);
+const ffmpeg = (args, opts) => run(FFMPEG, ["-y", ...args], opts);
+
+// Color grade NHẸ theo design (chất phim riêng từng mẫu). CHỈ áp ở chế độ chỉ-slide;
+// KHÔNG áp ở chế độ HeyGen để giữ nguyên chất lượng/độ trung thực của avatar.
+// Tắt toàn cục bằng env DISABLE_GRADE=1.
+const GRADE = {
+  "neo-brutal": "eq=contrast=1.06:saturation=1.12",
+  "vaporwave": "eq=saturation=1.22:contrast=1.04,colorbalance=rs=0.04:bs=0.06:gm=-0.02",
+  "y2k-aero": "eq=brightness=0.02:saturation=1.08",
+  "editorial": "eq=saturation=0.93:gamma=1.03,colorbalance=rs=0.05:gs=0.01:bs=-0.04",
+  "aurora-mesh": "eq=saturation=1.12:contrast=1.04",
+  "pop-comic": "eq=saturation=1.24:contrast=1.08",
+  "neon-glow": "eq=contrast=1.12:saturation=1.18,colorbalance=bs=0.04",
+  "swiss-mono": "eq=contrast=1.05",
+  "frost-glass": "eq=saturation=1.06,colorbalance=bs=0.05:rs=-0.02",
+  "blueprint": "colorbalance=rs=-0.05:bs=0.07,eq=saturation=0.95:contrast=1.05",
+};
+function gradeFor(themeId) {
+  if (process.env.DISABLE_GRADE === "1") return "";
+  return GRADE[themeStyle(themeId)] || "";
+}
 
 // Cắt im lặng đầu/đuôi và rút ngắn khoảng nghỉ trong câu (giữ tối đa 0.25s)
 // → giọng đọc liền mạch, không ngắt nghỉ; đồng thời chống lỗi TTS sinh dư im lặng.
@@ -87,7 +174,20 @@ async function trimSilence(p) {
  * @param {(p:{phase:string,percent:number,detail?:string})=>void} progress
  * @returns {Promise<{videoPath:string, duration:number, scenes:number, voice:string, music:string}>}
  */
+// Engine render (npx hyperframes) dùng API styleText của Node -> CẦN Node >= 20.12 (khuyến nghị 22).
+// Kiểm tra SỚM để báo lỗi rõ ràng thay vì "npx exit 1 ... handleMainPromise" khó hiểu.
+export function ensureRenderNode() {
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  if (maj < 20 || (maj === 20 && min < 12)) {
+    throw new Error(
+      `Bước render cần Node >= 20.12 (khuyến nghị 22), đang chạy v${process.versions.node}. ` +
+        `Chạy tool bằng Node 22: "nvm install 22 && nvm use 22 && npm start" hoặc chạy "bash setup.sh".`,
+    );
+  }
+}
+
 export async function produceVideo(task, progress = () => {}) {
+  ensureRenderNode();
   const id = task.id;
   const dir = path.join(WORKDIR, `task-${id}`);
   const audioDir = path.join(dir, "audio");
@@ -99,8 +199,20 @@ export async function produceVideo(task, progress = () => {}) {
   const voiceSpec = { ref: task.voiceRef };
   const voiceLabel = resolveVoiceLabel(task.voiceRef);
 
-  // 1) Sinh kịch bản - AI (OpenRouter) hoặc từ nội dung có sẵn
-  const scenes = await buildScenes(task, progress);
+  // 0) FORMAT LINH HOẠT: random 1 bộ format cho video này (màu vẫn cố định theo mẫu).
+  //    media -> đẩy vào AI để chọn bố cục; transition/caption/entrance -> truyền vào composition.
+  const fmt = randomFormat();
+  task._fmt = fmt;
+
+  // 1) Sinh kịch bản - AI (OpenRouter) hoặc từ nội dung có sẵn (theo media random)
+  const scenes = await buildScenes(task, progress, fmt.media);
+
+  // 1a) Quét sạch em-dash/en-dash khỏi MỌI text cảnh (TTS + hiển thị) - yêu cầu cứng của dự án.
+  sanitizeScenes(scenes);
+
+  // 1b) Tìm & tải ẢNH THẬT cho các cảnh ảnh (photo/split/gallery hoặc cảnh có "query").
+  //     Áp dụng cho CẢ hai chế độ (đặt trước nhánh HeyGen). Best-effort: lỗi -> bỏ ảnh.
+  await resolveSceneImages(scenes, path.join(dir, "img"), progress);
 
   // Chế độ ghép HeyGen (avatar nói cùng slide) đi nhánh riêng.
   if (task.mode === "heygen") {
@@ -113,6 +225,7 @@ export async function produceVideo(task, progress = () => {}) {
       voiceSpec,
       voiceLabel,
       progress,
+      format: fmt,
     });
   }
 
@@ -155,6 +268,11 @@ export async function produceVideo(task, progress = () => {}) {
     starts,
     total,
     aspectRatio: task.aspectRatio || "16:9",
+    theme: task.theme || DEFAULT_THEME_ID,
+    font: task.font || "auto", // font người dùng chọn (override font của mẫu)
+    textScale: TEXT_SCALE, // phóng chữ cho dễ đọc
+    format: task._fmt, // format random đã chọn cho video này
+    renderScale: OUTPUT_SCALE, // render TỐI THIỂU 2K
   });
   fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
 
@@ -200,6 +318,7 @@ export async function produceVideo(task, progress = () => {}) {
     musicPath: musicTrack?.path,
     total,
     outPath: finalPath,
+    videoFilter: gradeFor(task.theme), // color grade nhẹ theo design (chỉ chế độ slide)
   });
 
   progress({ phase: "Hoàn tất", percent: 100 });
@@ -212,12 +331,91 @@ export async function produceVideo(task, progress = () => {}) {
   };
 }
 
+// Tìm & tải ảnh thật cho các cảnh cần hình. Sửa scenes tại chỗ:
+//  - photo/split: set scene.image = "img/sN.ext" (+ _credit); fail -> degrade layout.
+//  - gallery: set scene.images = [rel...]; fail -> section.
+//  - cảnh khác có "query": cũng gắn ảnh (dùng cho mọi layout muốn minh hoạ).
+// Best-effort, tuần tự (nhẹ cho API), giới hạn số ảnh/clip để khỏi chậm.
+/* eslint-disable no-await-in-loop */
+async function resolveSceneImages(scenes, imgDir, progress = () => {}) {
+  if (process.env.DISABLE_AUTO_IMAGES === "1") return;
+  let count = 0;
+  const MAX = Number(process.env.MAX_AUTO_IMAGES || 4); // hạn chế ảnh ngoài (ưu tiên code/browser dựng HTML)
+  for (let i = 0; i < scenes.length; i++) {
+    if (count >= MAX) break;
+    const s = scenes[i];
+    const wantImg = s.layout === "photo" || s.layout === "split" || s.layout === "gallery";
+    if (!wantImg && !s.query) continue;
+    progress({ phase: "Tìm ảnh minh hoạ", percent: 5, detail: `Cảnh ${i + 1}/${scenes.length}` });
+    try {
+      if (s.layout === "gallery") {
+        const qs = (Array.isArray(s.images) ? s.images : [])
+          .map((x) => (typeof x === "string" ? x : x && (x.query || x.src)))
+          .filter(Boolean);
+        const list = qs.length ? qs : [s.query || s.heading].filter(Boolean);
+        const rels = [];
+        let cred = "";
+        for (let k = 0; k < Math.min(3, list.length) && count < MAX; k++) {
+          const r = await fetchImage(list[k], imgDir, `s${i}_${k}`);
+          count++;
+          if (r) {
+            rels.push(`img/${r.name}`);
+            cred = cred || creditLine(r);
+          }
+        }
+        if (rels.length) {
+          s.images = rels;
+          if (cred) s._credit = cred;
+        } else {
+          s.layout = "section"; // không có ảnh -> mở phần bằng tiêu đề
+        }
+      } else {
+        const q = s.query || s.heading || s.title;
+        const r = q ? await fetchImage(q, imgDir, `s${i}`) : null;
+        count++;
+        if (r) {
+          s.image = `img/${r.name}`;
+          s._credit = creditLine(r);
+        } else if (s.layout === "photo") {
+          s.layout = "section";
+        } else if (s.layout === "split") {
+          s.layout = "point"; // vẫn còn heading + body
+        }
+      }
+    } catch {
+      // bỏ qua: cảnh không có ảnh, layout tự degrade ở trên nếu cần
+    }
+  }
+}
+/* eslint-enable no-await-in-loop */
+
+// Bỏ em-dash/en-dash (và các biến thể) khỏi chuỗi -> thay bằng gạch nối thường.
+// Dự án TUYỆT ĐỐI không dùng em-dash trong video.
+const NO_DASH_RE = /[‒–—―−]/g;
+function noEmDash(v) {
+  return typeof v === "string" ? v.replace(NO_DASH_RE, "-") : v;
+}
+// Quét đệ quy toàn bộ string trong mảng scenes (narration, heading, items, steps, stats...).
+function sanitizeScenes(scenes) {
+  const walk = (v) => {
+    if (typeof v === "string") return noEmDash(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      for (const k of Object.keys(v)) v[k] = walk(v[k]);
+      return v;
+    }
+    return v;
+  };
+  if (Array.isArray(scenes)) scenes.forEach((s) => walk(s));
+  return scenes;
+}
+
 // Sinh danh sách scene từ task (AI hoặc nội dung có sẵn) - dùng chung 2 chế độ.
-async function buildScenes(task, progress) {
+async function buildScenes(task, progress, media) {
   const autogen = typeof task.autogen === "boolean" ? task.autogen : !task.content;
   if (autogen) {
     progress({ phase: "Sinh nội dung (AI)", percent: 3 });
-    const script = await generateScript(task.topic, { guidance: task.content });
+    const script = await generateScript(task.topic, { guidance: task.content, media });
     return scenesFromPlan({ topic: task.topic, title: script.title, scenes: script.scenes });
   }
   progress({ phase: "Soạn kịch bản", percent: 4 });
@@ -253,10 +451,12 @@ async function produceHeygenComposite({
   voiceSpec,
   voiceLabel,
   progress,
+  format,
 }) {
   const id = task.id;
   const aspectRatio = task.aspectRatio === "9:16" ? "9:16" : "16:9";
-  const geo = splitLayout(aspectRatio);
+  const geo = scaleGeo(splitLayout(aspectRatio), OUTPUT_SCALE); // khung HeyGen cũng đạt 2K
+  const bg = themeBg(task.theme || DEFAULT_THEME_ID); // nền avatar + canvas khớp theme
 
   // 2) Vbee đọc cả bài (1 lần) -> file + URL công khai.
   progress({ phase: "Tạo giọng đọc (cả bài)", percent: 10 });
@@ -290,6 +490,10 @@ async function produceHeygenComposite({
     aspectRatio: geo.hf.design,
     captureWidth: geo.hf.w,
     captureHeight: geo.hf.h,
+    theme: task.theme || DEFAULT_THEME_ID,
+    font: task.font || "auto", // font người dùng chọn (override font của mẫu)
+    textScale: HEYGEN_TEXT_SCALE, // HeyGen: chữ TO hơn vì panel chỉ chiếm nửa khung
+    format, // format random đã chọn cho video này
   });
   fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
 
@@ -318,10 +522,13 @@ async function produceHeygenComposite({
     },
   );
 
+  // HeyGen render ở độ phân giải cao hơn nửa khung (supersample) -> thu nhỏ lúc ghép cho nét.
+  const hgReq = heygenRequestDims(geo.hg.w, geo.hg.h);
   const renderHeygen = generateHeygenVideo({
     audioUrl,
-    width: geo.hg.w,
-    height: geo.hg.h,
+    width: hgReq.w,
+    height: hgReq.h,
+    background: bg,
     outPath: heygenMp4,
     onProgress: (p) =>
       progress({ phase: "Dựng avatar HeyGen", percent: 50, detail: p.detail || "" }),
@@ -342,6 +549,7 @@ async function produceHeygenComposite({
     musicPath: musicTrack?.path,
     total,
     geo,
+    bg,
     outPath: finalPath,
   });
 
@@ -365,17 +573,21 @@ async function compositeHeygen({
   musicPath,
   total,
   geo,
+  bg,
   outPath,
 }) {
   const T = total.toFixed(3);
   const { final: F, hf, hg } = geo;
   const hasMusic = musicPath && fs.existsSync(musicPath);
+  const canvas = `0x${String(bg || "#03070f").replace("#", "")}`; // nền canvas khớp theme
 
-  // Video: dựng canvas nền tối -> overlay slide (đúng cỡ) -> overlay avatar (cover + crop).
+  // Video: dựng canvas nền (màu theme) -> overlay slide (đúng cỡ) -> overlay avatar (cover + crop).
+  // scale lanczos (sắc nét hơn bilinear) cho cả nửa slide lẫn nửa avatar.
+  // HeyGen đã render lớn hơn panel -> đây là thu nhỏ (downscale) nên rất nét.
   const vparts = [
-    `color=c=0x03070f:s=${F.w}x${F.h}:r=30:d=${T}[bg]`,
-    `[0:v]fps=30,scale=${hf.w}:${hf.h},setsar=1[hf]`,
-    `[1:v]fps=30,scale=${hg.w}:${hg.h}:force_original_aspect_ratio=increase,crop=${hg.w}:${hg.h},setsar=1[hg]`,
+    `color=c=${canvas}:s=${F.w}x${F.h}:r=30:d=${T}[bg]`,
+    `[0:v]fps=30,scale=${hf.w}:${hf.h}:flags=lanczos,setsar=1[hf]`,
+    `[1:v]fps=30,scale=${hg.w}:${hg.h}:force_original_aspect_ratio=increase:flags=lanczos,crop=${hg.w}:${hg.h},setsar=1[hg]`,
     `[bg][hf]overlay=${hf.x}:${hf.y}:eof_action=pass[t1]`,
     `[t1][hg]overlay=${hg.x}:${hg.y}:eof_action=pass,format=yuv420p[v]`,
   ];
@@ -407,9 +619,9 @@ async function compositeHeygen({
     "-c:v",
     "libx264",
     "-preset",
-    "veryfast",
+    HEYGEN_PRESET,
     "-crf",
-    "20",
+    HEYGEN_CRF,
     "-pix_fmt",
     "yuv420p",
     "-c:a",
@@ -453,8 +665,12 @@ async function buildNarration(scenePaths, narrStarts, total, outPath) {
   ]);
 }
 
-async function muxFinal({ silentMp4, narrationWav, musicPath, total, outPath }) {
+async function muxFinal({ silentMp4, narrationWav, musicPath, total, outPath, videoFilter }) {
   const T = total.toFixed(3);
+  // Nếu có color grade -> re-encode video kèm -vf; nếu không -> copy nguyên (nhanh, không đổi pixel).
+  const vArgs = videoFilter
+    ? ["-vf", videoFilter, "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p"]
+    : ["-c:v", "copy"];
   if (musicPath && fs.existsSync(musicPath)) {
     // asplit: dùng giọng đọc 2 nơi (1 để mix, 1 làm sidechain ducking nhạc nền)
     const filter =
@@ -477,8 +693,7 @@ async function muxFinal({ silentMp4, narrationWav, musicPath, total, outPath }) 
       "0:v",
       "-map",
       "[a]",
-      "-c:v",
-      "copy",
+      ...vArgs,
       "-c:a",
       "aac",
       "-b:a",
@@ -496,8 +711,7 @@ async function muxFinal({ silentMp4, narrationWav, musicPath, total, outPath }) 
       "0:v",
       "-map",
       "1:a",
-      "-c:v",
-      "copy",
+      ...vArgs,
       "-c:a",
       "aac",
       "-b:a",

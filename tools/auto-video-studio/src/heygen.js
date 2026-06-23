@@ -27,6 +27,7 @@ export async function generateHeygenVideo({
   audioUrl,
   width,
   height,
+  background,
   outPath,
   onProgress = () => {},
 }) {
@@ -41,7 +42,8 @@ export async function generateHeygenVideo({
       {
         character: { type: "avatar", avatar_id: avatarId, avatar_style: "normal" },
         voice: { type: "audio", audio_url: audioUrl },
-        background: { type: "color", value: cfg.background || "#03070f" },
+        // Nền avatar đặt = màu nền theme của slide để hai nửa hoà liền mạch.
+        background: { type: "color", value: background || cfg.background || "#03070f" },
       },
     ],
     dimension: { width: even(width), height: even(height) },

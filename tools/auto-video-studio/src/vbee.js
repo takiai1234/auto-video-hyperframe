@@ -12,7 +12,7 @@ export async function synthesizeVbee(text, voiceCode, outPath, cfgOverride) {
   if (!cfg.appId) throw new Error("Chưa nhập App ID (ID ứng dụng) của Vbee.");
   if (!cfg.token) throw new Error("Chưa nhập Token (JWT) của Vbee.");
   if (!voiceCode) throw new Error("Chưa chọn voice_code của Vbee.");
-  const base = (cfg.baseUrl || "https://vbee.vn/api/v1")
+  const base = (cfg.baseUrl || "https://vbee.vn/api/v1/tts")
     .trim()
     .replace(/\/+$/, "")
     .replace(/\/tts$/i, "");

@@ -12,8 +12,8 @@ function clean(s) {
 
 function deriveHeading(text) {
   const t = clean(text).replace(/\s+/g, " ");
-  // Lấy mệnh đề đầu (trước dấu . , : ; –) hoặc ~7 từ đầu
-  const firstClause = t.split(/[.:;–-]/)[0].trim();
+  // Lấy mệnh đề đầu (trước dấu . , : ; -) hoặc ~7 từ đầu
+  const firstClause = t.split(/[.:;-]/)[0].trim();
   const words = firstClause.split(" ");
   let h = words.slice(0, 8).join(" ");
   if (h.length > 64) h = h.slice(0, 61).trimEnd() + "…";
@@ -85,7 +85,7 @@ function splitSections(content) {
       return { heading, body: body || heading, narration: body || heading };
     }
     // "Heading: body" hoặc "Heading - body"
-    m = block.match(/^(.{3,70}?)\s*[:\-–]\s+([\s\S]+)$/);
+    m = block.match(/^(.{3,70}?)\s*[:-]\s+([\s\S]+)$/);
     if (m && m[1].split(" ").length <= 9) {
       return { heading: clean(m[1]), body: clean(m[2]), narration: clean(m[2]) };
     }
@@ -164,11 +164,12 @@ export function scenesFromPlan({ topic, title, scenes }) {
   const t = clean(title) || clean(topic) || "Video";
   const out = (scenes || []).map((s) => ({ ...s }));
 
-  if (!out.length || out[0].layout !== "title") {
-    out.unshift({ layout: "title", title: t, subtitle: "", narration: `Hôm nay chúng ta cùng tìm hiểu về ${t}.` });
+  // Cảnh mở đầu chấp nhận "title" (badge) HOẶC "cover" (bìa tạp chí). Thiếu thì thêm cover.
+  if (!out.length || (out[0].layout !== "title" && out[0].layout !== "cover")) {
+    out.unshift({ layout: "cover", kicker: "Chủ đề", title: t, subtitle: "", narration: `Hôm nay chúng ta cùng tìm hiểu về ${t}.` });
   }
   out[0].title = out[0].title || out[0].heading || t;
-  out[0].initials = initials(out[0].title);
+  if (out[0].layout === "title") out[0].initials = initials(out[0].title);
 
   const last = out[out.length - 1];
   if (last.layout !== "outro") {

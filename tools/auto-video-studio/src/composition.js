@@ -35,6 +35,16 @@ function initials(s) {
     .toUpperCase();
 }
 
+// Dựng badge LOGO từ object đã giải ở pre-pass (Module A / assets.js).
+// lg = { html, color, mono }. html là MARK bên trong (svg path / <img> / chữ cái) -
+// nội dung do chính ta sinh ra ở assets.js nên nhúng thẳng (đã thoát ở nguồn).
+// Quầng sáng + nền theo brand-color qua biến --c. lg rỗng -> trả "".
+function logoBadge(lg, cls = "") {
+  if (!lg || !lg.html) return "";
+  const c = lg.color || "#7c8bdc";
+  return `<div class="logo-badge ${lg.mono ? "mono" : ""} ${cls}" style="--c:${esc(c)}">${lg.html}</div>`;
+}
+
 // =====================================================================
 // CSS RIÊNG CHO TỪNG "DESIGN STYLE" (viral MXH).
 // Mỗi style được composition gắn class .design-<style> lên #stage; khối CSS dưới
@@ -801,11 +811,227 @@ function sceneHtml(s, i) {
       break;
     }
 
+    // ============ MODULE B - 12 LAYOUT MỚI (concept pack: app/brand/social) ============
+    case "device": {
+      // Khoe app/web qua KHUNG MÁY (iphone/ipad/browser) + screenshot/skeleton.
+      const dev = s.device || {};
+      const frame = (dev.frame || s.frame || "iphone").toLowerCase();
+      const accent = dev.accent || s.accent || (s._brandLogo && s._brandLogo.color) || "";
+      const localShot =
+        dev._shotFile ||
+        s.shotFile ||
+        (typeof dev.shot === "string" && !/^https?:/.test(dev.shot) ? dev.shot : "") ||
+        s.image ||
+        "";
+      const screen = localShot
+        ? `<img class="dv-shot" id="${p}_shot" src="${esc(localShot)}" alt="" />`
+        : `<div class="dv-skeleton"><div class="sk-bar"></div><div class="sk-line w70"></div><div class="sk-line w90"></div><div class="sk-card"></div><div class="sk-line w80"></div><div class="sk-line w55"></div></div>`;
+      const idx = dev.sideIndex || s.sideIndex;
+      const lab = dev.sideLabel || s.sideLabel;
+      const side = idx
+        ? `<div class="side-index"><span class="n">${esc(idx)}</span>${lab ? `<span>${esc(lab)}</span>` : ""}</div>`
+        : "";
+      const dvc =
+        frame === "browser"
+          ? `<div class="dvc browser" id="${p}_dv"><div class="dvb-chrome"><span class="dvb-dot r"></span><span class="dvb-dot y"></span><span class="dvb-dot g"></span><div class="dvb-url">${esc(dev.url || s.url || "app.local")}</div></div><div class="dv-screen">${screen}</div></div>`
+          : `<div class="dvc ${frame === "ipad" ? "ipad" : "iphone"}" id="${p}_dv"><div class="dv-screen">${screen}</div></div>`;
+      inner = `${kicker}${heading}<div class="device-wrap"${accent ? ` style="--accent:${esc(accent)}"` : ""}>${side}${dvc}</div>`;
+      break;
+    }
+
+    case "social-card": {
+      // Dựng lại profile/post MXH (x/linkedin/youtube).
+      const soc = s.social || {};
+      const plat = (soc.platform || "x").toLowerCase();
+      const avatar = soc._avatarFile || (typeof soc.avatar === "string" && !/^https?:/.test(soc.avatar) ? soc.avatar : "");
+      const banner = soc._bannerFile || (typeof soc.banner === "string" && !/^https?:/.test(soc.banner) ? soc.banner : "");
+      const verified = soc.verified
+        ? `<span class="sc-verified"><svg viewBox="0 0 24 24" fill="#fff"><path d="M9.6 16.2 5.4 12l-1.4 1.4L9.6 19 20 8.6 18.6 7.2z"/></svg></span>`
+        : "";
+      const av = avatar
+        ? `<img class="sc-av" src="${esc(avatar)}" alt="" />`
+        : `<div class="sc-av sc-av-mono">${esc((String(soc.name || "?").trim()[0] || "?").toUpperCase())}</div>`;
+      const cta = soc.cta ? `<div class="sc-cta">${esc(soc.cta)}</div>` : "";
+      inner =
+        `${kicker}<div class="social-card plat-${esc(plat)}" id="${p}_sc">` +
+        `<div class="sc-banner">${banner ? `<img src="${esc(banner)}" alt="" />` : ""}</div>` +
+        av +
+        `<div class="sc-body"><div class="sc-name">${esc(soc.name || "")}${verified}</div>` +
+        `<div class="sc-handle">${esc(soc.handle || "")}</div>` +
+        (soc.bio ? `<div class="sc-bio">${esc(soc.bio)}</div>` : "") +
+        cta +
+        `</div></div>`;
+      break;
+    }
+
+    case "brand-stat": {
+      // So sánh số liệu CÓ LOGO brand, số phát sáng theo màu thương hiệu.
+      const items = arr(s.items).slice(0, 4);
+      const hdr = s.title
+        ? `<div class="bstat-hd">${s.headerIcon ? `<span class="bs-hicon">${esc(s.headerIcon)}</span>` : ""}<span>${esc(s.title)}</span></div>`
+        : "";
+      inner =
+        `${kicker}${heading}${hdr}<div class="bstat n${items.length}">` +
+        items
+          .map((it, j) => {
+            const accv = it.accent || (it._logo && it._logo.color) || "";
+            const badge = logoBadge(it._logo, "bs-badge");
+            const big = it.big != null ? it.big : it.value != null ? it.value : "";
+            return `<div class="cell" id="${p}_i${j}"${accv ? ` style="--accent:${esc(accv)}"` : ""}>${badge}<div class="big">${esc(big)}${it.unit ? `<span class="unit">${esc(it.unit)}</span>` : ""}</div>${it.sub ? `<div class="pill">${esc(it.sub)}</div>` : ""}</div>`;
+          })
+          .join("") +
+        `</div>`;
+      break;
+    }
+
+    case "product-grid": {
+      // 2-3 sản phẩm/model.
+      const items = arr(s.items).slice(0, 3);
+      inner =
+        `${kicker}${heading}<div class="prod-grid n${items.length}">` +
+        items
+          .map((it, j) => {
+            const img = it._img || (typeof it.img === "string" && !/^https?:/.test(it.img) ? it.img : "");
+            const media = img ? `<div class="pg-media"><img src="${esc(img)}" alt="" /></div>` : `<div class="pg-media pg-sk"></div>`;
+            const price = it.price
+              ? `<div class="pg-price">${it.price.in ? `<span>${esc(it.price.in)}</span>` : ""}${it.price.out ? `<span class="pg-out">${esc(it.price.out)}</span>` : ""}</div>`
+              : "";
+            return `<div class="pg-card" id="${p}_i${j}">${media}<div class="pg-name">${esc(it.name || "")}</div>${it.desc ? `<div class="pg-desc">${esc(it.desc)}</div>` : ""}${price}</div>`;
+          })
+          .join("") +
+        `</div>`;
+      break;
+    }
+
+    case "app-hero": {
+      // Mở màn 1 sản phẩm: icon squircle + tiêu đề gradient + pills.
+      const icon = s._brandLogo
+        ? logoBadge(s._brandLogo, "ah-badge")
+        : s.icon
+          ? `<div class="ah-squircle">${esc(s.icon)}</div>`
+          : "";
+      const pills = arr(s.pills)
+        .map(
+          (pl, j) =>
+            `<div class="ah-pill ${esc(pl.tone || "")}" id="${p}_i${j}"><span>${esc(pl.l || "")}</span>${pl.arrow ? `<span class="ah-arrow">${esc(pl.arrow)}</span>` : ""}${pl.r ? `<span>${esc(pl.r)}</span>` : ""}</div>`,
+        )
+        .join("");
+      inner = `${kicker}<div class="app-hero" id="${p}_ah">${icon}<h1 class="ah-title" id="${p}_h">${esc(s.title || s.heading || "")}</h1>${pills ? `<div class="ah-pills">${pills}</div>` : ""}</div>`;
+      break;
+    }
+
+    case "myth-bust": {
+      // Phá niềm tin sai: ✗ wrong (gạch ngang) -> right.
+      const m = s.myth || {};
+      const wrong = m.wrong || s.wrong || "";
+      const right = m.right || s.right || "";
+      const ic = m.icon || s.icon || "";
+      inner = `${kicker}${heading}<div class="myth" id="${p}_my">${ic ? `<span class="my-ic">${esc(ic)}</span>` : ""}<span class="x">✗</span> <span class="wrong">${esc(wrong)}</span> <span class="arrow">→</span> <span class="right">${esc(right)}</span></div>`;
+      break;
+    }
+
+    case "claim-card": {
+      // Trích dẫn/chưa kiểm chứng.
+      const unv = !!s.unverified;
+      inner =
+        `${kicker}<div class="claim-card ${unv ? "unverified" : ""}" id="${p}_cl">` +
+        (s.tag ? `<div class="cl-tag">${esc(s.tag)}</div>` : "") +
+        `<div class="cl-quote">${esc(s.claim || s.text || "")}</div>` +
+        (s.source ? `<div class="cl-source">${esc(s.source)}</div>` : "") +
+        (unv ? `<div class="cl-badge">⚠ Chưa kiểm chứng</div>` : "") +
+        `</div>`;
+      break;
+    }
+
+    case "roadmap-glow": {
+      // Quy trình node đánh số phát sáng + connector chạy.
+      const steps = (arr(s.steps).length ? arr(s.steps) : arr(s.items)).slice(0, 6);
+      inner =
+        `${kicker}${heading}<div class="rmg" id="${p}_rg">` +
+        steps
+          .map(
+            (st, j) =>
+              `<div class="rmg-node" id="${p}_i${j}"><div class="rmg-n">${esc(st.n != null ? st.n : j + 1)}</div><div class="rmg-ic">${esc(st.icon || "◆")}</div><div class="rmg-t">${esc(st.title || "")}</div>${st.sub ? `<div class="rmg-s">${esc(st.sub)}</div>` : ""}</div>`,
+          )
+          .join(`<div class="rmg-link"></div>`) +
+        `</div>`;
+      break;
+    }
+
+    case "segment-compare": {
+      // So phân khúc khách: tên + ghi chú + thanh điểm 0-100.
+      const items = arr(s.items).slice(0, 4);
+      const sc = (v) => Math.max(0, Math.min(100, parseFloat(String(v ?? "").replace(/[^\d.]/g, "")) || 0));
+      inner =
+        `${kicker}${heading}<div class="segc" id="${p}_sg">` +
+        items
+          .map((it, j) => {
+            const v = sc(it.score);
+            const badge = it._logo ? logoBadge(it._logo, "sg-badge") : it.icon ? `<div class="sg-ic">${esc(it.icon)}</div>` : "";
+            return `<div class="segc-row" id="${p}_i${j}">${badge}<div class="sg-main"><div class="sg-name">${esc(it.name || "")}</div>${it.note ? `<div class="sg-note">${esc(it.note)}</div>` : ""}<div class="sg-track"><div class="sg-fill" style="width:${v}%"></div></div></div><div class="sg-score">${esc(it.score != null ? it.score : v)}</div></div>`;
+          })
+          .join("") +
+        (s.verdict ? `<div class="sg-verdict">${esc(s.verdict)}</div>` : "") +
+        `</div>`;
+      break;
+    }
+
+    case "flow-broken": {
+      // Giả định gãy: A --✕--> B (mũi tên gạch chéo).
+      const a = s.a || {},
+        b = s.b || {};
+      const broken = s.broken !== false;
+      inner = `${kicker}${heading}<div class="flowbk ${broken ? "broken" : ""}" id="${p}_fb"><div class="fb-node" id="${p}_i0"><div class="fb-ic">${esc(a.icon || "■")}</div><div class="fb-l">${esc(a.label || "")}</div></div><div class="fb-arrow"><span class="fb-line"></span>${broken ? `<span class="fb-slash">✕</span>` : ""}</div><div class="fb-node" id="${p}_i1"><div class="fb-ic">${esc(b.icon || "■")}</div><div class="fb-l">${esc(b.label || "")}</div></div></div>`;
+      break;
+    }
+
+    case "icon-row": {
+      // Tóm tắt 3-4 ý (có thể kèm logo brand).
+      const items = arr(s.items).slice(0, 4);
+      inner =
+        `${kicker}${heading}<div class="icon-row n${items.length}">` +
+        items
+          .map((it, j) => {
+            const badge = it._logo ? logoBadge(it._logo, "ir-badge") : `<div class="ir-ic">${esc(it.icon || "◆")}</div>`;
+            return `<div class="ir-cell" id="${p}_i${j}">${badge}<div class="ir-l">${esc(it.label || it.title || "")}</div></div>`;
+          })
+          .join("") +
+        `</div>`;
+      break;
+    }
+
+    case "pricing-row": {
+      // Bảng giá in/out.
+      const cols = arr(s.cols);
+      const rows = arr(s.rows).slice(0, 6);
+      const head = cols.length
+        ? `<div class="pr-row pr-head"><div class="pr-name"></div>${cols.map((c) => `<div class="pr-cell">${esc(c)}</div>`).join("")}</div>`
+        : "";
+      inner =
+        `${kicker}${heading}<div class="pricing" id="${p}_pr">${head}` +
+        rows
+          .map(
+            (r, j) =>
+              `<div class="pr-row" id="${p}_i${j}"><div class="pr-name">${esc(r.name || "")}</div>${arr(r.vals).map((v) => `<div class="pr-cell">${esc(v)}</div>`).join("")}</div>`,
+          )
+          .join("") +
+        `</div>`;
+      break;
+    }
+
     default: // fallback = statement
       inner = `${kicker}${heading}${s.body ? `<div class="point-body" id="${p}_b">${esc(s.body)}</div>` : ""}`;
   }
 
-  return `      <section class="scene acc-${acc} layout-${esc(s.layout || "point")}" id="scene-${i}">\n        ${inner}\n      </section>`;
+  // MODULE C1 - Section-chip: nhãn "tên chương" hiện góc trên (khi scene có "chapter").
+  const chip = s.chapter
+    ? `<div class="section-chip" id="${p}_chip"><span class="sc-dot"></span>${esc(s.chapter)}</div>`
+    : "";
+  // MODULE C2 - Brand glow: lấy --accent của scene từ brand-color (nếu có) -> quầng sáng đồng bộ.
+  const sAccent = s.accent || (s._brandLogo && s._brandLogo.color) || (s._logos && s._logos[0] && s._logos[0].color) || "";
+  const styleAttr = sAccent ? ` style="--accent:${esc(sAccent)}"` : "";
+
+  return `      <section class="scene acc-${acc} layout-${esc(s.layout || "point")}" id="scene-${i}"${styleAttr}>\n        ${chip}${inner}\n      </section>`;
 }
 
 // Profile tiết tấu (pacing) entrance theo design - đổi ease/độ dài/giãn cách của
@@ -1104,6 +1330,70 @@ function sceneEntrances(s, i, start, prof, dur) {
         L.push(`tl.from("#${p}_sub", { y: 24, opacity: 0, duration: 0.6, ease: "power3.out" }, ${t(1.05)});`);
       if (arr(s.chips).length) stagger(`#scene-${i} .cv-chip`, "y: 20, opacity: 0", 1.25, 0.1);
       break;
+    // ============ MODULE B/C - entrance cho 12 layout mới ============
+    case "device":
+      headIn();
+      L.push(`tl.from("#${p}_dv", { y: 60, scale: 0.92, opacity: 0, duration: 0.8, ease: "power3.out" }, ${t(0.3)});`);
+      L.push(`tl.from("#scene-${i} .side-index", { x: -16, opacity: 0, duration: 0.6, ease: "power2.out" }, ${t(0.7)});`);
+      break;
+    case "social-card":
+      headIn();
+      L.push(`tl.from("#${p}_sc", { y: 50, scale: 0.94, opacity: 0, duration: 0.75, ease: "power3.out" }, ${t(0.3)});`);
+      L.push(`tl.from("#${p}_sc .sc-av", { scale: 0, opacity: 0, duration: 0.55, ease: "back.out(1.7)" }, ${t(0.7)});`);
+      break;
+    case "brand-stat":
+      headIn();
+      stagger(`#scene-${i} .bstat .cell`, "y: 44, opacity: 0", 0.7, 0.15);
+      L.push(`tl.from("#scene-${i} .bstat .big", { scale: 0.7, opacity: 0, duration: 0.6, ease: "back.out(1.6)", stagger: 0.15 }, ${t(0.9)});`);
+      break;
+    case "product-grid":
+      headIn();
+      stagger(`#scene-${i} .pg-card`, "y: 50, opacity: 0", 0.7, 0.15);
+      break;
+    case "app-hero":
+      L.push(`tl.from("#${p}_ah .ah-badge, #${p}_ah .ah-squircle", { scale: 0, rotation: -12, opacity: 0, duration: 0.7, ease: "back.out(1.7)" }, ${t(0.1)});`);
+      L.push(`tl.from("#${p}_h", { y: 44, opacity: 0, duration: 0.7, ease: "expo.out" }, ${t(0.5)});`);
+      stagger(`#scene-${i} .ah-pill`, "y: 24, opacity: 0", 0.95, 0.12);
+      break;
+    case "myth-bust":
+      headIn();
+      L.push(`tl.from("#${p}_my .wrong", { opacity: 0, duration: 0.5, ease: "power1.out" }, ${t(0.5)});`);
+      L.push(`tl.from("#${p}_my .x", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(2)" }, ${t(0.7)});`);
+      L.push(`tl.from("#${p}_my .arrow", { x: -18, opacity: 0, duration: 0.4, ease: "power2.out" }, ${t(0.95)});`);
+      L.push(`tl.from("#${p}_my .right", { x: 18, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, ${t(1.1)});`);
+      break;
+    case "claim-card":
+      if (s.kicker)
+        L.push(`tl.from("#${p}_k", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(0.05)});`);
+      L.push(`tl.from("#${p}_cl", { y: 40, scale: 0.95, opacity: 0, duration: 0.7, ease: "power3.out" }, ${t(0.2)});`);
+      break;
+    case "roadmap-glow":
+      headIn();
+      L.push(`tl.from("#scene-${i} .rmg-node", { y: 40, scale: 0.82, opacity: 0, duration: 0.5, ease: "back.out(1.6)", stagger: 0.16 }, ${t(0.6)});`);
+      L.push(`tl.from("#scene-${i} .rmg-link", { scaleX: 0, opacity: 0, duration: 0.4, ease: "power2.out", stagger: 0.16, transformOrigin: "left center" }, ${t(0.8)});`);
+      break;
+    case "segment-compare":
+      headIn();
+      stagger(`#scene-${i} .segc-row`, "x: -40, opacity: 0", 0.7, 0.14);
+      L.push(`tl.from("#scene-${i} .sg-fill", { scaleX: 0, duration: 0.7, ease: "power3.out", stagger: 0.14, transformOrigin: "left center" }, ${t(0.95)});`);
+      if (s.verdict)
+        L.push(`tl.from("#scene-${i} .sg-verdict", { y: 18, opacity: 0, duration: 0.5, ease: "power2.out" }, ${t(1.3)});`);
+      break;
+    case "flow-broken":
+      headIn();
+      L.push(`tl.from("#${p}_i0", { x: -40, opacity: 0, duration: 0.6, ease: "power3.out" }, ${t(0.5)});`);
+      L.push(`tl.from("#${p}_i1", { x: 40, opacity: 0, duration: 0.6, ease: "power3.out" }, ${t(0.7)});`);
+      L.push(`tl.from("#${p}_fb .fb-slash", { scale: 0, rotate: -40, opacity: 0, duration: 0.5, ease: "back.out(2)" }, ${t(1.0)});`);
+      break;
+    case "icon-row":
+      headIn();
+      stagger(`#scene-${i} .ir-cell`, "y: 36, opacity: 0", 0.7, 0.12);
+      break;
+    case "pricing-row":
+      headIn();
+      stagger(`#scene-${i} .pricing .pr-row`, "y: 22, opacity: 0", 0.6, 0.1);
+      break;
+
     default:
       headIn();
       if (s.body)
@@ -1770,6 +2060,240 @@ export function buildComposition({
       .portrait .loop-node .ln-t { font-size: 22px; }
       .portrait .lc-while { font-size: 30px; }
       .portrait .custombox { max-height: 1100px; }
+
+      /* =================================================================== */
+      /* ===== MODULE B/C - CSS 12 LAYOUT MỚI (concept pack) ============== */
+      /* =================================================================== */
+
+      /* C1 - Section-chip (tên chương, góc trên trái) */
+      .section-chip{position:absolute;top:60px;left:80px;display:inline-flex;align-items:center;gap:12px;
+        font-size:24px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+        background:rgba(255,255,255,0.05);border:1px solid var(--line);border-radius:999px;padding:10px 22px;
+        backdrop-filter:blur(8px);z-index:6;}
+      .section-chip .sc-dot{width:12px;height:12px;border-radius:50%;background:var(--accent,var(--teal));
+        box-shadow:0 0 14px var(--accent,var(--teal));}
+
+      /* Badge logo dùng chung (Module A: icon SVG / img / monogram) */
+      .logo-badge{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+        color:#fff;background:radial-gradient(120% 120% at 30% 25%,color-mix(in srgb,var(--c) 80%,#fff),var(--c));
+        box-shadow:0 0 40px -8px var(--c),inset 0 1px 0 rgba(255,255,255,0.4);overflow:hidden;}
+      .logo-badge svg{width:54%;height:54%;fill:currentColor;}
+      .logo-badge img{width:72%;height:72%;object-fit:contain;}
+      .logo-badge.mono{font:800 40px/1 var(--font);}
+
+      /* B1 - device: khung iphone / ipad / browser */
+      .device-wrap{position:relative;display:flex;align-items:center;justify-content:center;}
+      .dvc{position:relative;}
+      .dvc.iphone{width:392px;height:790px;border-radius:58px;padding:13px;
+        background:linear-gradient(160deg,#2a2d34,#0e0f12);
+        box-shadow:0 40px 100px rgba(0,0,0,0.6),inset 0 0 0 2px #3a3d44,0 0 90px -20px var(--accent,#7c8bdc);}
+      .dvc.iphone::before{content:"";position:absolute;top:26px;left:50%;translate:-50% 0;width:120px;height:34px;
+        border-radius:20px;background:#000;z-index:3;}
+      .dvc.iphone .dv-screen{width:100%;height:100%;border-radius:46px;}
+      .dvc.ipad{width:620px;height:800px;border-radius:40px;padding:20px;
+        background:linear-gradient(160deg,#2a2d34,#0e0f12);
+        box-shadow:0 40px 100px rgba(0,0,0,0.6),inset 0 0 0 2px #3a3d44,0 0 90px -20px var(--accent,#7c8bdc);}
+      .dvc.ipad .dv-screen{width:100%;height:100%;border-radius:22px;}
+      .dvc.browser{width:880px;height:560px;border-radius:18px;overflow:hidden;
+        background:#0e0f12;border:1px solid #2a3142;
+        box-shadow:0 40px 100px rgba(0,0,0,0.55),0 0 90px -20px var(--accent,#7c8bdc);}
+      .dvb-chrome{display:flex;align-items:center;gap:10px;padding:14px 20px;background:#15181f;border-bottom:1px solid #262c38;}
+      .dvb-dot{width:14px;height:14px;border-radius:50%;}
+      .dvb-dot.r{background:#ff5f57;} .dvb-dot.y{background:#febc2e;} .dvb-dot.g{background:#28c840;}
+      .dvb-url{flex:1;margin-left:14px;font-size:22px;color:#aab4c4;background:#0b0d12;border-radius:10px;
+        padding:8px 18px;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+      .dv-screen{overflow:hidden;background:#0b0d12;position:relative;}
+      .dv-shot{width:100%;height:100%;object-fit:cover;object-position:top center;display:block;}
+      .dv-skeleton{width:100%;height:100%;padding:34px 26px;display:flex;flex-direction:column;gap:18px;
+        background:linear-gradient(180deg,#11151c,#0b0d12);}
+      .dv-skeleton .sk-bar{height:46px;border-radius:14px;background:rgba(255,255,255,0.1);width:60%;}
+      .dv-skeleton .sk-line{height:22px;border-radius:8px;background:rgba(255,255,255,0.07);}
+      .dv-skeleton .sk-line.w90{width:90%;} .dv-skeleton .sk-line.w80{width:80%;}
+      .dv-skeleton .sk-line.w70{width:70%;} .dv-skeleton .sk-line.w55{width:55%;}
+      .dv-skeleton .sk-card{height:150px;border-radius:18px;background:rgba(124,139,220,0.18);
+        border:1px solid rgba(124,139,220,0.3);margin:8px 0;}
+
+      /* B2 - nhãn index dọc bên hông */
+      .side-index{position:absolute;left:-26px;top:50%;translate:0 -50%;writing-mode:vertical-rl;rotate:180deg;
+        font:800 24px/1 var(--font);letter-spacing:4px;color:var(--muted);display:flex;align-items:center;gap:18px;}
+      .side-index .n{color:var(--accent,#fff);font-size:34px;}
+
+      /* B3 - social-card */
+      .social-card{width:600px;border-radius:26px;overflow:hidden;background:rgba(255,255,255,0.05);
+        border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 30px 90px rgba(0,0,0,0.5);text-align:left;}
+      .social-card .sc-banner{height:170px;background:linear-gradient(120deg,var(--accent,#3a4a6a),#1a2236);}
+      .social-card .sc-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+      .social-card .sc-av{width:128px;height:128px;border-radius:50%;border:6px solid #0b0d12;margin:-66px 0 0 28px;
+        object-fit:cover;position:relative;z-index:2;display:grid;place-items:center;background:#1a2236;}
+      .social-card .sc-av-mono{font:800 56px/1 var(--font);color:#fff;}
+      .social-card .sc-body{padding:14px 30px 32px;}
+      .social-card .sc-name{font:800 40px/1.1 var(--font);display:flex;align-items:center;gap:12px;color:var(--text);}
+      .sc-verified{width:34px;height:34px;border-radius:50%;background:#1d9bf0;display:inline-grid;place-items:center;flex:0 0 auto;}
+      .sc-verified svg{width:22px;height:22px;}
+      .social-card .sc-handle{color:var(--muted);font-size:28px;margin:6px 0 16px;}
+      .social-card .sc-bio{font-size:28px;line-height:1.45;color:var(--text);}
+      .social-card .sc-cta{display:inline-block;margin-top:22px;background:var(--accent,#1d9bf0);color:#fff;font-weight:800;
+        font-size:26px;padding:14px 32px;border-radius:999px;}
+      .plat-linkedin .sc-banner{background:linear-gradient(120deg,#0a66c2,#063e78);}
+      .plat-linkedin .sc-cta{background:#0a66c2;}
+      .plat-youtube .sc-banner{background:linear-gradient(120deg,#3a0d0d,#1a0808);}
+      .plat-youtube .sc-cta{background:#f00;}
+
+      /* B4 - brand-stat (số phát sáng neon) */
+      .bstat-hd{display:inline-flex;align-items:center;gap:14px;font-size:30px;font-weight:700;color:var(--muted);
+        margin-bottom:36px;padding-bottom:14px;border-bottom:2px solid;border-image:linear-gradient(90deg,transparent,var(--teal),transparent) 1;}
+      .bstat-hd .bs-hicon{font-size:38px;}
+      .bstat{display:grid;gap:48px;width:100%;max-width:1500px;}
+      .bstat.n1{grid-template-columns:1fr;max-width:760px;} .bstat.n2{grid-template-columns:1fr 1fr;}
+      .bstat.n3{grid-template-columns:repeat(3,1fr);} .bstat.n4{grid-template-columns:repeat(2,1fr);}
+      .bstat .cell{text-align:center;display:flex;flex-direction:column;align-items:center;}
+      .bstat .bs-badge{width:84px;height:84px;margin:0 auto 22px;box-shadow:0 0 50px -10px var(--accent,var(--c));}
+      .bstat .big{font:900 96px/1 var(--font);color:#fff;text-shadow:0 0 50px var(--accent,var(--teal));}
+      .bstat .big .unit{font-size:42px;font-weight:800;margin-left:8px;color:var(--muted);text-shadow:none;}
+      .bstat .pill{display:inline-block;margin-top:16px;padding:14px 28px;border-radius:18px;font-size:28px;
+        background:color-mix(in srgb,var(--accent,var(--teal)) 20%,transparent);
+        border:1px solid color-mix(in srgb,var(--accent,var(--teal)) 55%,transparent);
+        box-shadow:0 0 60px -16px var(--accent,var(--teal));}
+
+      /* B - product-grid */
+      .prod-grid{display:grid;gap:34px;width:100%;max-width:1500px;}
+      .prod-grid.n1{grid-template-columns:1fr;max-width:640px;} .prod-grid.n2{grid-template-columns:1fr 1fr;}
+      .prod-grid.n3{grid-template-columns:repeat(3,1fr);}
+      .pg-card{background:rgba(255,255,255,0.05);border:1px solid var(--line);border-radius:22px;padding:26px;
+        backdrop-filter:blur(10px);box-shadow:0 18px 50px rgba(0,0,0,0.35);}
+      .pg-media{height:240px;border-radius:16px;overflow:hidden;margin-bottom:20px;background:rgba(255,255,255,0.04);}
+      .pg-media img{width:100%;height:100%;object-fit:cover;}
+      .pg-media.pg-sk{background:linear-gradient(135deg,rgba(124,139,220,0.18),rgba(46,196,182,0.12));
+        border:1px solid rgba(255,255,255,0.08);}
+      .pg-name{font-size:34px;font-weight:800;color:var(--text);}
+      .pg-desc{font-size:25px;color:var(--muted);margin-top:8px;line-height:1.4;}
+      .pg-price{margin-top:16px;font-size:30px;font-weight:800;color:var(--teal);display:flex;gap:14px;align-items:baseline;}
+      .pg-price .pg-out{color:var(--amber);}
+
+      /* B5 - app-hero */
+      .app-hero{display:flex;flex-direction:column;align-items:center;gap:30px;}
+      .ah-squircle{width:150px;height:150px;border-radius:38px;display:grid;place-items:center;font-size:72px;
+        background:linear-gradient(150deg,var(--panel2),var(--bg));border:1px solid var(--line);
+        box-shadow:0 30px 80px rgba(124,139,220,0.3);}
+      .app-hero .ah-badge{width:150px;height:150px;border-radius:38px;}
+      .app-hero .ah-badge svg{width:50%;height:50%;}
+      .ah-title{font:900 96px/1.04 var(--font);letter-spacing:-2px;margin:0;max-width:1400px;
+        background:var(--title-fill);-webkit-background-clip:text;background-clip:text;color:transparent;}
+      .ah-pills{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:8px;}
+      .ah-pill{display:inline-flex;align-items:center;gap:12px;font-size:28px;font-weight:700;color:var(--text);
+        background:rgba(255,255,255,0.06);border:1px solid var(--line);border-radius:999px;padding:14px 28px;}
+      .ah-pill .ah-arrow{color:var(--teal);font-weight:900;}
+      .ah-pill.good{border-color:color-mix(in srgb,#39d98a 55%,transparent);color:#7ef0b6;}
+      .ah-pill.bad{border-color:color-mix(in srgb,var(--red) 55%,transparent);color:#ff9aa6;}
+
+      /* B5 - myth-bust */
+      .myth{font:800 56px/1.4 var(--font);text-align:center;max-width:1500px;}
+      .myth .my-ic{margin-right:14px;}
+      .myth .x{color:var(--red);}
+      .myth .wrong{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:6px;
+        color:var(--muted);opacity:0.75;}
+      .myth .arrow{color:var(--amber);margin:0 10px;}
+      .myth .right{color:#39d98a;}
+
+      /* B - claim-card */
+      .claim-card{position:relative;max-width:1280px;background:rgba(255,255,255,0.05);border:1px solid var(--line);
+        border-radius:24px;padding:46px 56px;backdrop-filter:blur(12px);box-shadow:0 30px 90px rgba(0,0,0,0.45);text-align:left;}
+      .claim-card.unverified{border-color:color-mix(in srgb,var(--amber) 55%,transparent);}
+      .cl-tag{display:inline-block;font-size:24px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+        color:var(--teal);background:rgba(46,196,182,0.12);border:1px solid color-mix(in srgb,var(--teal) 45%,transparent);
+        border-radius:999px;padding:8px 20px;margin-bottom:24px;}
+      .cl-quote{font:700 48px/1.35 var(--font);color:var(--text);}
+      .cl-source{margin-top:24px;font-size:26px;color:var(--muted);}
+      .cl-badge{position:absolute;top:30px;right:34px;font-size:24px;font-weight:800;color:#1a1205;
+        background:var(--amber);border-radius:999px;padding:8px 20px;}
+
+      /* B8 - roadmap-glow */
+      .rmg{display:flex;align-items:stretch;justify-content:center;gap:0;flex-wrap:nowrap;max-width:1640px;}
+      .rmg-node{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;
+        padding:0 18px;position:relative;}
+      .rmg-n{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;font:900 34px/1 var(--font);color:#fff;
+        background:radial-gradient(120% 120% at 30% 25%,color-mix(in srgb,var(--accent,var(--teal)) 80%,#fff),var(--accent,var(--teal)));
+        box-shadow:0 0 44px -6px var(--accent,var(--teal));margin-bottom:18px;}
+      .rmg-ic{font-size:42px;margin-bottom:10px;}
+      .rmg-t{font-size:30px;font-weight:800;color:var(--text);line-height:1.15;}
+      .rmg-s{font-size:24px;color:var(--muted);margin-top:8px;line-height:1.3;}
+      .rmg-link{flex:0 0 60px;align-self:flex-start;height:6px;margin-top:34px;border-radius:3px;
+        background:linear-gradient(90deg,var(--accent,var(--teal)),color-mix(in srgb,var(--accent,var(--teal)) 20%,transparent));
+        box-shadow:0 0 20px -4px var(--accent,var(--teal));}
+
+      /* B9 - segment-compare */
+      .segc{display:flex;flex-direction:column;gap:22px;width:100%;max-width:1400px;}
+      .segc-row{display:flex;align-items:center;gap:24px;background:rgba(255,255,255,0.04);border:1px solid var(--line);
+        border-radius:18px;padding:22px 28px;text-align:left;}
+      .segc-row .sg-badge{width:72px;height:72px;}
+      .sg-ic{width:72px;height:72px;border-radius:18px;display:grid;place-items:center;font-size:40px;flex:0 0 auto;
+        background:rgba(255,255,255,0.06);border:1px solid var(--line);}
+      .sg-main{flex:1;min-width:0;}
+      .sg-name{font-size:32px;font-weight:800;color:var(--text);}
+      .sg-note{font-size:24px;color:var(--muted);margin:2px 0 12px;}
+      .sg-track{height:16px;border-radius:8px;background:rgba(255,255,255,0.08);overflow:hidden;}
+      .sg-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--teal),var(--accent,var(--violet)));
+        box-shadow:0 0 20px -2px var(--teal);}
+      .sg-score{font:900 48px/1 var(--font);color:#fff;flex:0 0 auto;min-width:110px;text-align:right;
+        text-shadow:0 0 30px var(--teal);}
+      .sg-verdict{margin-top:14px;font-size:30px;font-weight:700;color:var(--amber);text-align:center;}
+
+      /* B10 - flow-broken */
+      .flowbk{display:flex;align-items:center;justify-content:center;gap:0;}
+      .fb-node{display:flex;flex-direction:column;align-items:center;gap:16px;}
+      .fb-ic{width:150px;height:150px;border-radius:30px;display:grid;place-items:center;font-size:70px;
+        background:rgba(255,255,255,0.05);border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,0.35);}
+      .fb-l{font-size:32px;font-weight:800;color:var(--text);}
+      .fb-arrow{position:relative;width:240px;height:60px;display:grid;place-items:center;}
+      .fb-line{width:100%;height:6px;border-radius:3px;background:var(--muted);opacity:0.5;}
+      .flowbk.broken .fb-line{background:repeating-linear-gradient(90deg,var(--red) 0 18px,transparent 18px 30px);opacity:0.85;}
+      .fb-slash{position:absolute;font-size:54px;font-weight:900;color:var(--red);rotate:12deg;
+        text-shadow:0 0 24px rgba(255,90,106,0.6);}
+
+      /* B11 - icon-row */
+      .icon-row{display:flex;justify-content:center;gap:34px;flex-wrap:wrap;max-width:1600px;}
+      .ir-cell{display:flex;flex-direction:column;align-items:center;gap:18px;flex:1 1 0;min-width:200px;max-width:340px;
+        background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:22px;padding:36px 24px;text-align:center;}
+      .ir-cell .ir-badge{width:96px;height:96px;}
+      .ir-ic{width:96px;height:96px;border-radius:24px;display:grid;place-items:center;font-size:52px;
+        background:rgba(255,255,255,0.06);border:1px solid var(--line);}
+      .ir-l{font-size:30px;font-weight:700;color:var(--text);line-height:1.2;}
+
+      /* B12 - pricing-row */
+      .pricing{display:flex;flex-direction:column;gap:0;width:100%;max-width:1400px;border:1px solid var(--line);
+        border-radius:20px;overflow:hidden;}
+      .pr-row{display:flex;align-items:center;border-bottom:1px solid var(--line);}
+      .pr-row:last-child{border-bottom:none;}
+      .pr-row.pr-head{background:rgba(255,255,255,0.06);font-weight:800;color:var(--teal);text-transform:uppercase;letter-spacing:1px;}
+      .pr-name{flex:1.4;text-align:left;padding:22px 30px;font-size:30px;font-weight:700;color:var(--text);}
+      .pr-cell{flex:1;text-align:center;padding:22px 18px;font-size:30px;color:var(--text);
+        border-left:1px solid var(--line);}
+      .pr-head .pr-cell,.pr-head .pr-name{font-size:26px;}
+
+      /* ===== Portrait (9:16) cho layout mới ===== */
+      .portrait .dvc.browser{width:840px;height:540px;}
+      .portrait .dvc.ipad{width:560px;height:740px;}
+      .portrait .social-card{width:860px;}
+      .portrait .bstat{gap:34px;max-width:940px;}
+      .portrait .bstat.n3,.portrait .bstat.n4{grid-template-columns:1fr 1fr;}
+      .portrait .bstat .big{font-size:78px;}
+      .portrait .prod-grid{max-width:940px;}
+      .portrait .prod-grid.n3{grid-template-columns:1fr;}
+      .portrait .ah-title{font-size:78px;}
+      .portrait .myth{font-size:48px;max-width:940px;}
+      .portrait .claim-card{max-width:940px;padding:38px 40px;}
+      .portrait .cl-quote{font-size:40px;}
+      .portrait .rmg{flex-wrap:wrap;gap:20px 0;max-width:940px;}
+      .portrait .rmg-node{flex:1 1 33%;}
+      .portrait .rmg-link{display:none;}
+      .portrait .segc{max-width:940px;}
+      .portrait .icon-row{max-width:940px;}
+      .portrait .pricing{max-width:940px;}
+      .portrait .flowbk{flex-direction:column;gap:0;}
+      .portrait .fb-arrow{width:60px;height:200px;}
+      .portrait .fb-line{width:6px;height:100%;}
+      .portrait .flowbk.broken .fb-line{background:repeating-linear-gradient(180deg,var(--red) 0 18px,transparent 18px 30px);}
+      .portrait .section-chip{top:40px;left:50px;font-size:21px;}
 
       /* ===== CSS RIÊNG THEO DESIGN STYLE (ghi đè nền/font/viền/trang trí) ===== */
       ${designStyle ? designCss(designStyle) : ""}

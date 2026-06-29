@@ -520,6 +520,43 @@ Layout mới bổ sung gần đây: **bignum** (1 con số khổng lồ), **kpi*
 **gauge** (vòng tròn %), **definition** (thuật ngữ + định nghĩa), **checklist** (danh sách tick),
 **icongrid** (lưới icon), **pros** (ưu/nhược), **roadmap** (timeline ngang).
 
+### Concept Pack - 12 layout "khoe app / brand / social" + logo thật
+
+Bộ layout nâng đầu ra ngang chất "giao diện thật + logo thật + stat phát sáng" (Reels). Tất cả
+nhận logo/screenshot đã tải sẵn ở **pre-pass** (Module A, xác định 100%, không fetch lúc render).
+
+| Layout | Dùng khi | Field chính |
+| ------ | -------- | ----------- |
+| `device` | Khoe app/web qua khung máy | `device:{frame:"iphone\|ipad\|browser", shotUrl?, url?, sideIndex?, sideLabel?, accent?}` |
+| `social-card` | Dựng lại profile MXH | `social:{platform:"x\|linkedin\|youtube", name, handle, verified?, bio, cta?, avatar?, banner?}` |
+| `brand-stat` | So số liệu CÓ logo brand | `title?`, `headerIcon?`, `items:[{brand\|domain, big, unit, sub, accent?}]` |
+| `product-grid` | 2-3 sản phẩm/model | `items:[{name, desc, price?:{in,out}}]` |
+| `app-hero` | Mở màn 1 sản phẩm | `brand\|icon`, `title`, `pills:[{l, arrow?, r, tone?}]` |
+| `myth-bust` | Phá niềm tin sai | `myth:{wrong, right, icon?}` |
+| `claim-card` | Trích dẫn/chưa kiểm chứng | `tag`, `claim`, `source?`, `unverified?` |
+| `roadmap-glow` | Quy trình node sáng | `steps:[{n, icon, title, sub}]` |
+| `segment-compare` | So phân khúc + điểm | `items:[{icon, name, note, score:0-100}]`, `verdict?` |
+| `flow-broken` | Giả định gãy (mũi tên ✕) | `a:{icon,label}`, `b:{icon,label}`, `broken?` |
+| `icon-row` | Tóm tắt 3-4 ý (kèm logo) | `items:[{icon\|brand, label}]` |
+| `pricing-row` | Bảng giá in/out | `cols:[]`, `rows:[{name, vals:[]}]` |
+
+Decorator dùng chung: thêm `"chapter":"..."` cho BẤT KỲ cảnh nào để hiện **section-chip** (nhãn
+chương góc trên); `--accent` của cảnh tự lấy theo màu brand → **brand-glow** đồng bộ.
+
+#### Module A - lấy logo/brand/screenshot ([`src/assets.js`](tools/auto-video-studio/src/assets.js))
+
+Chạy ở pre-pass (`resolveSceneAssets` trong [`pipeline.js`](tools/auto-video-studio/src/pipeline.js),
+gọi cạnh `resolveSceneImages`, cho **cả 2 chế độ**). Thứ tự giải 1 logo:
+
+1. **Simple Icons** (npm `simple-icons`) - SVG inline ~3000 brand, **offline & xác định**. Cấp `brand` = slug (vd `openai`, `github`, `tiktok`, `figma`).
+2. **Logo theo domain** - tải file: `logo.clearbit.com` → google favicon → duckduckgo. Cấp `domain` (vd `notewave.app`).
+3. **Monogram** - badge tròn chữ cái đầu trên nền brand-color (luôn chạy, kể cả offline).
+
+Screenshot app/web (`device.shotUrl`) chụp bằng puppeteer nếu có (best-effort; thiếu → skeleton).
+Best-effort toàn bộ: lỗi mạng → degrade về monogram/skeleton, KHÔNG làm hỏng render. Giới hạn
+`MAX_LOGOS` (mặc định 6), cache theo slug/domain; tắt logo brand bằng env `DISABLE_BRAND_LOGOS=1`
+(và `DISABLE_SCREENSHOTS=1` cho screenshot).
+
 ### "Dẫn chứng thực tế" dựng bằng HTML (thay ảnh stock)
 
 Thay vì tải ảnh ngoài chung chung, ưu tiên 3 layout DỰNG bằng HTML cho sát nội dung:

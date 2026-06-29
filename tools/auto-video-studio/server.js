@@ -11,6 +11,8 @@ import {
   publicVbee,
   setVbeeConfig,
   setVbeeVoices,
+  publicMinimax,
+  setMinimaxConfig,
   publicOpenrouter,
   setOpenrouterConfig,
   publicPrompts,
@@ -20,6 +22,7 @@ import {
   setHeygenConfig,
 } from "./src/settings.js";
 import { testVbee } from "./src/vbee.js";
+import { testMinimax } from "./src/minimax.js";
 import { testOpenrouter } from "./src/openrouter.js";
 import { testHeygen } from "./src/heygen.js";
 import {
@@ -49,6 +52,7 @@ const PORT = process.env.PORT || 5174;
 app.get("/api/meta", (req, res) => {
   res.json({
     vbee: publicVbee(),
+    minimax: publicMinimax(),
     openrouter: publicOpenrouter(),
     prompts: publicPrompts(),
     heygen: publicHeygen(),
@@ -82,10 +86,10 @@ app.get("/api/events", (req, res) => {
 
 // ---- Tạo / sửa / xoá task ----
 app.post("/api/tasks", (req, res) => {
-  const { topic, content, approved, voiceRef, music, autogen, aspectRatio, mode, theme, font } =
+  const { topic, content, approved, voiceRef, voiceProvider, music, autogen, aspectRatio, mode, theme, font } =
     req.body || {};
   if (!topic && !content) return res.status(400).json({ error: "Cần chủ đề hoặc nội dung." });
-  const t = addTask({ topic, content, approved, voiceRef, music, autogen, aspectRatio, mode, theme, font });
+  const t = addTask({ topic, content, approved, voiceRef, voiceProvider, music, autogen, aspectRatio, mode, theme, font });
   res.json({ task: t });
 });
 
@@ -93,7 +97,7 @@ app.patch("/api/tasks/:id", (req, res) => {
   const t = getTask(req.params.id);
   if (!t) return res.status(404).json({ error: "Không tìm thấy task." });
   const allowed = {};
-  for (const k of ["topic", "content", "voiceRef", "music", "aspectRatio", "mode", "theme", "font"]) {
+  for (const k of ["topic", "content", "voiceRef", "voiceProvider", "music", "aspectRatio", "mode", "theme", "font"]) {
     if (k in (req.body || {})) allowed[k] = req.body[k];
   }
   if ("approved" in (req.body || {})) allowed.approved = req.body.approved === true;
@@ -114,12 +118,13 @@ app.post("/api/clear", (req, res) => {
 
 // ---- Áp dụng voice/nhạc hàng loạt ----
 app.post("/api/bulk", (req, res) => {
-  const { voiceRef, aspectRatio, music, mode, theme, font, onlyApproved } = req.body || {};
+  const { voiceRef, voiceProvider, aspectRatio, music, mode, theme, font, onlyApproved } = req.body || {};
   let n = 0;
   for (const t of listTasks()) {
     if (onlyApproved && t.approved !== true) continue;
     const patch = {};
     if (voiceRef !== undefined && voiceRef !== "") patch.voiceRef = voiceRef;
+    if (voiceProvider === "vbee" || voiceProvider === "minimax") patch.voiceProvider = voiceProvider;
     if (aspectRatio) patch.aspectRatio = aspectRatio;
     if (music) patch.music = music;
     if (mode) patch.mode = mode === "heygen" ? "heygen" : "hyperframe";
@@ -173,6 +178,35 @@ app.post("/api/settings/vbee/voices", (req, res) => {
 app.post("/api/vbee/test", async (req, res) => {
   try {
     const r = await testVbee(req.body?.voiceCode);
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message || err) });
+  }
+});
+
+// ---- Cấu hình Minimax (giọng đọc thay thế Vbee) ----
+app.post("/api/settings/minimax", (req, res) => {
+  const { apiKey, groupId, baseUrl, model, voiceId, voiceLabel, speed, vol, pitch, emotion, languageBoost } =
+    req.body || {};
+  const patch = {};
+  if (apiKey !== undefined && apiKey !== "") patch.apiKey = apiKey.trim(); // không ghi đè bằng rỗng
+  if (groupId !== undefined) patch.groupId = String(groupId).trim();
+  if (baseUrl) patch.baseUrl = baseUrl.trim();
+  if (model) patch.model = String(model).trim();
+  if (voiceId !== undefined) patch.voiceId = String(voiceId).trim();
+  if (voiceLabel !== undefined) patch.voiceLabel = String(voiceLabel).trim();
+  if (speed !== undefined && speed !== "") patch.speed = Number(speed);
+  if (vol !== undefined && vol !== "") patch.vol = Number(vol);
+  if (pitch !== undefined && pitch !== "") patch.pitch = Number(pitch);
+  if (emotion !== undefined) patch.emotion = String(emotion).trim();
+  if (languageBoost) patch.languageBoost = String(languageBoost).trim();
+  setMinimaxConfig(patch);
+  res.json({ minimax: publicMinimax() });
+});
+
+app.post("/api/minimax/test", async (req, res) => {
+  try {
+    const r = await testMinimax(req.body?.voiceCode);
     res.json(r);
   } catch (err) {
     res.status(400).json({ error: String(err?.message || err) });
@@ -249,6 +283,7 @@ app.post("/api/upload", upload.single("file"), (req, res) => {
           content,
           approved,
           voiceRef: req.body.voiceRef || "",
+          voiceProvider: req.body.voiceProvider || "vbee",
           music: req.body.music || "random",
           aspectRatio: req.body.aspectRatio || "16:9",
           mode: req.body.mode || "hyperframe",

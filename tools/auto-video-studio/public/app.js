@@ -1,5 +1,6 @@
 let META = {
   vbee: { voices: [], configured: false },
+  minimax: { voices: [], configured: false },
   openrouter: { configured: false },
   prompts: { system: "", userTemplate: "", isDefault: true },
   heygen: { configured: false, avatarId: "" },
@@ -40,10 +41,15 @@ function esc(s) {
 }
 
 // ---------- Option builders ----------
-function refOptions(selected) {
-  const list = META.vbee.voices.map((v) => ({ value: v.code, label: v.label || v.code }));
+// Danh sách giọng theo nhà cung cấp (vbee | minimax).
+function voicesOf(provider) {
+  return (provider === "minimax" ? META.minimax?.voices : META.vbee?.voices) || [];
+}
+function refOptions(selected, provider) {
+  const prov = provider === "minimax" ? "minimax" : "vbee";
+  const list = voicesOf(prov).map((v) => ({ value: v.code, label: v.label || v.code }));
   if (!list.length) {
-    return `<option value="">(thêm giọng Vbee)</option>`;
+    return `<option value="">(thêm giọng ${prov === "minimax" ? "Minimax" : "Vbee"})</option>`;
   }
   return list
     .map(
@@ -252,7 +258,10 @@ function renderTasks() {
         <option value="hyperframe" ${!heygen ? "selected" : ""}>Hyperframe</option>
         <option value="heygen" ${heygen ? "selected" : ""}>+ HeyGen</option>
       </select></td>
-      <td><select data-act="vref" ${busy ? "disabled" : ""}>${refOptions(t.voiceRef)}</select></td>
+      <td><select data-act="provider" ${busy ? "disabled" : ""} title="Nguồn giọng" style="margin-bottom:3px;">
+        <option value="vbee" ${t.voiceProvider !== "minimax" ? "selected" : ""}>Vbee</option>
+        <option value="minimax" ${t.voiceProvider === "minimax" ? "selected" : ""}>Minimax</option>
+      </select><select data-act="vref" ${busy ? "disabled" : ""}>${refOptions(t.voiceRef, t.voiceProvider)}</select></td>
       <td><select data-act="aspect" ${busy ? "disabled" : ""}>
         <option value="16:9" ${t.aspectRatio !== "9:16" ? "selected" : ""}>16:9</option>
         <option value="9:16" ${t.aspectRatio === "9:16" ? "selected" : ""}>9:16</option>
@@ -307,7 +316,12 @@ $("rows").addEventListener("change", async (e) => {
   const act = e.target.dataset.act;
   try {
     if (act === "vref") await api("PATCH", `/api/tasks/${id}`, { voiceRef: e.target.value });
-    else if (act === "aspect")
+    else if (act === "provider") {
+      // Đổi nhà cung cấp -> chọn luôn giọng đầu tiên của nguồn đó (tránh ref lệch nguồn).
+      const prov = e.target.value === "minimax" ? "minimax" : "vbee";
+      const firstVoice = voicesOf(prov)[0]?.code || "";
+      await api("PATCH", `/api/tasks/${id}`, { voiceProvider: prov, voiceRef: firstVoice });
+    } else if (act === "aspect")
       await api("PATCH", `/api/tasks/${id}`, { aspectRatio: e.target.value });
     else if (act === "music") await api("PATCH", `/api/tasks/${id}`, { music: e.target.value });
     else if (act === "mode") await api("PATCH", `/api/tasks/${id}`, { mode: e.target.value });
@@ -405,6 +419,7 @@ async function addTaskFromForm(mode) {
       approved: $("f-approved").checked,
       autogen: $("f-autogen").checked,
       voiceRef: $("f-vref").value,
+      voiceProvider: $("f-provider").value,
       music: $("f-music").value,
       aspectRatio: $("f-aspect").value,
       mode,
@@ -427,6 +442,7 @@ $("btn-upload").addEventListener("click", async () => {
   const fd = new FormData();
   fd.append("file", f);
   fd.append("voiceRef", $("f-vref").value);
+  fd.append("voiceProvider", $("f-provider").value);
   fd.append("music", $("f-music").value);
   fd.append("aspectRatio", $("f-aspect").value);
   fd.append("theme", selectedTheme);
@@ -459,18 +475,20 @@ $("btn-drive").addEventListener("click", async () => {
 
 $("btn-bulk").addEventListener("click", async () => {
   const voiceRef = $("bulk-vref").value;
+  const voiceProvider = $("bulk-provider").value;
   const aspectRatio = $("bulk-aspect").value;
   const music = $("bulk-music").value;
   const mode = $("bulk-mode").value;
   const theme = $("bulk-theme").value;
   const font = $("bulk-font").value;
-  if (!voiceRef && !aspectRatio && !music && !mode && !theme && !font)
-    return toast("Chọn giọng/tỷ lệ/chế độ/mẫu/font/nhạc để áp dụng", true);
+  if (!voiceRef && !voiceProvider && !aspectRatio && !music && !mode && !theme && !font)
+    return toast("Chọn nguồn giọng/giọng/tỷ lệ/chế độ/mẫu/font/nhạc để áp dụng", true);
   if (mode === "heygen" && !META.heygen?.configured)
     return toast("Cấu hình HeyGen trước khi áp dụng chế độ HeyGen", true);
   try {
     const r = await api("POST", "/api/bulk", {
       voiceRef,
+      voiceProvider,
       aspectRatio,
       music,
       mode,
@@ -621,6 +639,170 @@ $("btn-hg-test").addEventListener("click", async () => {
   }
 });
 
+// ---------- Dán nhanh cấu hình (tự động điền) ----------
+function deaccent(s) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+function normKey(s) {
+  return deaccent(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+// "id giọng anh Kiểm" -> "anh Kiểm" (nhãn hiển thị cho giọng).
+function voiceLabelFromKey(rawKey) {
+  let s = String(rawKey || "");
+  for (let i = 0; i < 3; i++) {
+    s = s.replace(/^\s*(id|giọng|giong|voice|của|cua|the|mã|ma|code)\b[\s:_-]*/i, "");
+  }
+  return s.trim() || "Giọng clone";
+}
+// Bóc 1 đoạn text có nhãn thành cấu hình theo từng nguồn.
+function parseConfigBlob(text) {
+  const out = { openrouter: {}, vbee: {}, minimax: {}, drive: {}, heygen: {}, _vbeeVoice: null };
+  const setVbeeVoice = (patch) => {
+    out._vbeeVoice = { code: "", label: "", ...(out._vbeeVoice || {}), ...patch };
+  };
+  const isLabel = (k) => k.includes("label") || k.includes("name") || k.includes("tenhienthi") || k.includes("hienthi");
+  let section = null;
+  const detect = (line) => {
+    const n = normKey(line);
+    if (n.startsWith("openrouter")) return "openrouter";
+    if (n.startsWith("vbee")) return "vbee";
+    if (n.startsWith("minimax")) return "minimax";
+    if (n.includes("googledrive") || n.startsWith("drive") || n.startsWith("gdrive")) return "drive";
+    if (n.startsWith("heygen")) return "heygen";
+    return null;
+  };
+  for (const raw of String(text || "").split(/\r?\n/)) {
+    const line = raw.replace(/^[\s\-•*+>]+/, "").trim();
+    if (!line) continue;
+    const sec = detect(line);
+    if (sec) section = sec;
+    const ci = line.indexOf(":");
+    if (ci < 0) continue; // dòng header thuần
+    const rawKey = line.slice(0, ci).trim();
+    const val = line.slice(ci + 1).trim();
+    if (!val || /^x{3,}$/i.test(val) || val === "...") continue; // bỏ giá trị rỗng/placeholder
+    const k = normKey(rawKey);
+    const eff = sec || section;
+    if (!eff) continue;
+    if (eff === "openrouter") {
+      if (k.includes("model")) out.openrouter.model = val;
+      else if (k.includes("api") || k.includes("key")) out.openrouter.apiKey = val;
+    } else if (eff === "vbee") {
+      if (k.includes("idapp") || k.includes("appid") || (k.includes("app") && k.includes("id")))
+        out.vbee.appId = val;
+      else if (k.includes("token")) out.vbee.token = val;
+      else if (k.includes("base") || k.includes("url")) out.vbee.baseUrl = val;
+      else if (isLabel(k) && (k.includes("voice") || k.includes("giong")))
+        setVbeeVoice({ label: val }); // voice_label
+      else if (k.includes("voice") || k.includes("giong") || k.includes("voicecode"))
+        setVbeeVoice({ code: val, label: out._vbeeVoice?.label || voiceLabelFromKey(rawKey) });
+    } else if (eff === "minimax") {
+      if (isLabel(k) && k.includes("voice")) out.minimax.voiceLabel = val; // voice_label
+      else if (k.includes("voiceid") || k.includes("idvoice") || k.includes("voice")) out.minimax.voiceId = val;
+      else if (k.includes("groupid") || (k.includes("group") && k.includes("id"))) out.minimax.groupId = val;
+      else if (k.includes("model")) out.minimax.model = val;
+      else if (k.includes("speed")) out.minimax.speed = val;
+      else if (k.includes("emotion")) out.minimax.emotion = val;
+      else if (k.includes("apikey") || k.includes("api") || k.includes("key")) out.minimax.apiKey = val;
+    } else if (eff === "drive") {
+      if (k.includes("link") || k.includes("folder") || k.includes("url") || /^https?:\/\//.test(val))
+        out.drive.url = val;
+      else if (k.includes("api") || k.includes("key")) out.drive.apiKey = val;
+    } else if (eff === "heygen") {
+      if (k.includes("avatar")) out.heygen.avatarId = val;
+      else if (k.includes("api") || k.includes("key")) out.heygen.apiKey = val;
+    }
+  }
+  return out;
+}
+async function applyParsedConfig(p, opts) {
+  const done = [];
+  const fail = [];
+  const step = async (label, fn) => {
+    try {
+      await fn();
+      done.push(label);
+    } catch (e) {
+      fail.push(`${label}: ${e.message}`);
+    }
+  };
+  if (p.openrouter.apiKey || p.openrouter.model)
+    await step("OpenRouter", () => api("POST", "/api/settings/openrouter", p.openrouter));
+  if (p.vbee.appId || p.vbee.token || p.vbee.baseUrl)
+    await step("Vbee", () => api("POST", "/api/settings/vbee", p.vbee));
+  if (p._vbeeVoice)
+    await step("Giọng Vbee", () =>
+      api("POST", "/api/settings/vbee/voices", { voices: [p._vbeeVoice] }),
+    );
+  if (Object.keys(p.minimax).length)
+    await step("Minimax", () => api("POST", "/api/settings/minimax", p.minimax));
+  if (p.heygen.apiKey || p.heygen.avatarId)
+    await step("Heygen", () => api("POST", "/api/settings/heygen", p.heygen));
+  if (opts.syncMusic && p.drive.url && p.drive.apiKey)
+    await step("Đồng bộ nhạc Drive", () =>
+      api("POST", "/api/drive/sync", { url: p.drive.url, apiKey: p.drive.apiKey }),
+    );
+  else if (p.drive.url || p.drive.apiKey)
+    fail.push("Google Drive: cần cả 'api' và 'link nhạc' (và tích đồng bộ) để tải nhạc.");
+  return { done, fail };
+}
+// Mẫu form CHUẨN (key cố định) - khớp parser tốt nhất.
+const CONFIG_TEMPLATE = `OpenRouter:
+- api:
+- model:
+
+Vbee:
+- id_app:
+- token:
+- voice_id:
+- voice_label:
+
+Minimax:
+- api_key:
+- group_id:
+- model: speech-2.6-hd
+- voice_id:
+- voice_label:
+- speed: 1
+
+Google Drive:
+- api:
+- link:
+
+Heygen:
+- api:
+- avatar: `;
+$("btn-paste-template").addEventListener("click", () => {
+  const cur = $("paste-cfg").value.trim();
+  if (cur && !confirm("Thay nội dung hiện tại bằng mẫu chuẩn?")) return;
+  $("paste-cfg").value = CONFIG_TEMPLATE;
+  $("paste-cfg").focus();
+});
+$("btn-paste-apply").addEventListener("click", async () => {
+  const text = $("paste-cfg").value;
+  if (!text.trim()) return toast("Dán nội dung cấu hình trước", true);
+  const parsed = parseConfigBlob(text);
+  $("paste-status").textContent = "Đang áp dụng…";
+  let res;
+  try {
+    res = await applyParsedConfig(parsed, { syncMusic: $("paste-sync-music").checked });
+  } finally {
+    $("paste-status").textContent = "";
+  }
+  await refreshMeta();
+  const out = [];
+  if (res.done.length) out.push("✓ Đã điền: " + res.done.join(", "));
+  if (res.fail.length) out.push("✗ " + res.fail.join("\n✗ "));
+  if (!res.done.length && !res.fail.length)
+    out.push("Không khớp trường nào. Kiểm tra nhãn (OpenRouter / Vbee / Minimax / Google Drive / Heygen).");
+  $("paste-result").textContent = out.join("\n");
+  toast(res.fail.length ? "Áp dụng xong (có cảnh báo)" : "Đã tự điền cấu hình", res.fail.length > 0);
+});
+
 // ---------- Vbee config ----------
 $("btn-vb-save").addEventListener("click", async () => {
   try {
@@ -675,6 +857,70 @@ $("vb-voices").addEventListener("click", async (e) => {
   } catch (err) {
     toast(err.message, true);
   }
+});
+
+// ---------- Minimax config (1 giọng clone qua voice_id) ----------
+$("btn-mm-save").addEventListener("click", async () => {
+  try {
+    await api("POST", "/api/settings/minimax", {
+      apiKey: $("mm-key").value,
+      groupId: $("mm-group").value,
+      baseUrl: $("mm-base").value,
+      model: $("mm-model").value,
+      voiceId: $("mm-voice-id").value,
+      voiceLabel: $("mm-voice-label").value,
+      speed: $("mm-speed").value,
+      emotion: $("mm-emotion").value,
+    });
+    $("mm-key").value = "";
+    await refreshMeta();
+    toast("Đã lưu cấu hình Minimax");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$("btn-mm-test").addEventListener("click", async () => {
+  const voiceCode = $("mm-voice-id").value.trim() || META.minimax?.voiceId;
+  if (!voiceCode) return toast("Nhập Voice ID (giọng clone) để test", true);
+  try {
+    toast("Đang test Minimax… (gọi API)");
+    const r = await api("POST", "/api/minimax/test", { voiceCode });
+    toast(`✓ Minimax OK (${r.ms}ms, ${r.size} bytes)`);
+  } catch (err) {
+    toast("Minimax lỗi: " + err.message, true);
+  }
+});
+
+// Tab chuyển nguồn giọng trong cửa sổ "Giọng đọc" (Vbee | Minimax).
+let voiceTab = null;
+function selectVoiceTab(prov) {
+  const p = prov === "minimax" ? "minimax" : "vbee";
+  voiceTab = p;
+  $("voice-panel-vbee").style.display = p === "vbee" ? "" : "none";
+  $("voice-panel-minimax").style.display = p === "minimax" ? "" : "none";
+  $("voice-tab-vbee").className = "sm" + (p === "vbee" ? "" : " ghost");
+  $("voice-tab-minimax").className = "sm" + (p === "minimax" ? "" : " ghost");
+  const cfgd = p === "vbee" ? META.vbee?.configured : META.minimax?.configured;
+  const name = p === "vbee" ? "Vbee" : "Minimax";
+  $("voice-tab-hint").innerHTML = cfgd
+    ? `<span style="color:var(--green)">● ${name} đã cấu hình</span>`
+    : `<span style="color:var(--muted)">${name} chưa cấu hình</span>`;
+}
+$("voice-tab-vbee").addEventListener("click", () => selectVoiceTab("vbee"));
+$("voice-tab-minimax").addEventListener("click", () => selectVoiceTab("minimax"));
+
+// Đổi nhà cung cấp ở ô "Thêm task" / "Áp dụng hàng loạt" -> nạp lại danh sách giọng tương ứng.
+$("f-provider").addEventListener("change", () => {
+  $("f-vref").innerHTML = refOptions("", $("f-provider").value);
+});
+$("bulk-provider").addEventListener("change", () => {
+  const prov = $("bulk-provider").value;
+  $("bulk-vref").innerHTML =
+    `<option value="">- Giọng -</option>` +
+    (prov ? voicesOf(prov) : [...(META.vbee?.voices || []), ...(META.minimax?.voices || [])])
+      .map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`)
+      .join("");
 });
 
 // ---------- Modal ----------
@@ -763,6 +1009,18 @@ function renderConfig() {
         .map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`)
         .join("")
     : `<option value="">(chưa có giọng)</option>`;
+  // Minimax (1 giọng clone)
+  const mm = META.minimax || { voices: [] };
+  $("mm-group").value = mm.groupId || "";
+  $("mm-base").value = mm.baseUrl || "";
+  $("mm-model").value = mm.model || "";
+  $("mm-voice-id").value = mm.voiceId || "";
+  $("mm-voice-label").value = mm.voiceLabel || "";
+  if (mm.speed !== undefined) $("mm-speed").value = mm.speed;
+  $("mm-emotion").value = mm.emotion || "";
+  $("mm-status").innerHTML = mm.configured
+    ? '<span style="color:var(--green)">● đã cấu hình</span>'
+    : '<span style="color:var(--red)">● chưa cấu hình</span>';
   // Danh sách nhạc (xoá được)
   $("music-list").innerHTML = (META.music || [])
     .map(
@@ -770,9 +1028,13 @@ function renderConfig() {
         `<div class="tagitem"><div><b>${esc(m.name)}</b></div><button class="ghost danger" data-del="${esc(m.id)}">✕</button></div>`,
     )
     .join("");
-  // Warn
-  const noVoice = !META.vbee.configured;
+  // Warn: chỉ cảnh báo khi CẢ HAI nguồn giọng đều chưa cấu hình.
+  const noVoice = !META.vbee.configured && !(META.minimax && META.minimax.configured);
   $("voice-warn").style.display = noVoice ? "block" : "none";
+  // Tab "Giọng đọc": giữ lựa chọn hiện tại; lần đầu mặc định theo nguồn đã cấu hình.
+  selectVoiceTab(
+    voiceTab || (META.vbee.configured ? "vbee" : META.minimax?.configured ? "minimax" : "vbee"),
+  );
 }
 
 // Xoá 1 bản nhạc
@@ -789,11 +1051,13 @@ $("music-list").addEventListener("click", async (e) => {
 });
 
 function fillFormSelects() {
-  $("f-vref").innerHTML = refOptions($("f-vref").value);
+  $("f-vref").innerHTML = refOptions($("f-vref").value, $("f-provider").value);
   $("f-music").innerHTML = musicOptions($("f-music").value);
+  // bulk-vref: theo nguồn đang chọn (rỗng = gộp cả 2 nguồn).
+  const bp = $("bulk-provider").value;
   $("bulk-vref").innerHTML =
     `<option value="">- Giọng -</option>` +
-    META.vbee.voices
+    (bp ? voicesOf(bp) : [...(META.vbee?.voices || []), ...(META.minimax?.voices || [])])
       .map((v) => `<option value="${esc(v.code)}">${esc(v.label || v.code)}</option>`)
       .join("");
   $("bulk-music").innerHTML =

@@ -137,3 +137,5 @@ tools/auto-video-studio/*.png
 # User-provided music (may be copyrighted) - keep folder, ignore contents
 tools/auto-video-studio/music/*
 !tools/auto-video-studio/music/.gitkeep
+# Local source backups created during upgrades - do not commit
+tools/auto-video-studio/backup/

@@ -9,10 +9,11 @@ import { buildComposition } from "./composition.js";
 import { themeBg, DEFAULT_THEME_ID, themeStyle, randomFormat } from "./themes.js";
 import { synthesize, synthesizeWithUrl, audioDuration } from "./voices.js";
 import { resolveMusic } from "./music.js";
-import { getVbeeConfig } from "./settings.js";
+import { getVbeeConfig, getMinimaxConfig } from "./settings.js";
 import { generateScript } from "./openrouter.js";
 import { generateHeygenVideo } from "./heygen.js";
 import { fetchImage, creditLine } from "./images.js";
+import { resolveSceneAssets } from "./assets.js";
 import { FFMPEG, FFMPEG_DIR, FFPROBE_DIR } from "./bin.js";
 
 // Nhồi vào ĐẦU PATH:
@@ -39,7 +40,11 @@ import { FFMPEG, FFMPEG_DIR, FFPROBE_DIR } from "./bin.js";
   }
 })();
 
-function resolveVoiceLabel(ref) {
+function resolveVoiceLabel(ref, provider) {
+  if (provider === "minimax") {
+    const v = getMinimaxConfig().voices.find((x) => x.code === ref);
+    return `Minimax: ${v?.label || ref || "?"}`;
+  }
   const v = getVbeeConfig().voices.find((x) => x.code === ref);
   return `Vbee: ${v?.label || ref || "?"}`;
 }
@@ -196,8 +201,9 @@ export async function produceVideo(task, progress = () => {}) {
   fs.mkdirSync(audioDir, { recursive: true });
   fs.mkdirSync(rendersDir, { recursive: true });
 
-  const voiceSpec = { ref: task.voiceRef };
-  const voiceLabel = resolveVoiceLabel(task.voiceRef);
+  const voiceProvider = task.voiceProvider === "minimax" ? "minimax" : "vbee";
+  const voiceSpec = { ref: task.voiceRef, provider: voiceProvider };
+  const voiceLabel = resolveVoiceLabel(task.voiceRef, voiceProvider);
 
   // 0) FORMAT LINH HOẠT: random 1 bộ format cho video này (màu vẫn cố định theo mẫu).
   //    media -> đẩy vào AI để chọn bố cục; transition/caption/entrance -> truyền vào composition.
@@ -213,6 +219,11 @@ export async function produceVideo(task, progress = () => {}) {
   // 1b) Tìm & tải ẢNH THẬT cho các cảnh ảnh (photo/split/gallery hoặc cảnh có "query").
   //     Áp dụng cho CẢ hai chế độ (đặt trước nhánh HeyGen). Best-effort: lỗi -> bỏ ảnh.
   await resolveSceneImages(scenes, path.join(dir, "img"), progress);
+
+  // 1c) Lấy LOGO / BRAND / SCREENSHOT cho các layout "khoe app/brand" (Module A).
+  //     Pre-pass xác định: tải về task-*/assets/ rồi tham chiếu local. Best-effort:
+  //     lỗi mạng -> tự degrade về monogram/skeleton, KHÔNG làm hỏng render. Cả 2 chế độ.
+  await resolveSceneAssets(scenes, dir, progress);
 
   // Chế độ ghép HeyGen (avatar nói cùng slide) đi nhánh riêng.
   if (task.mode === "heygen") {

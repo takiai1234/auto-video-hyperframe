@@ -19,7 +19,31 @@ const DEFAULT_VBEE_VOICES = [
   { code: "sg_female_thaotrinh_full_48k-fhg", label: "Thảo Trinh (Nữ, Nam Bộ)" },
 ];
 
+// Minimax dùng 1 giọng CLONE: chỉ cần 1 voice_id (không có danh sách giọng mặc định).
+// Suy ra "voices" (cho dropdown chọn giọng) từ voiceId; rỗng -> không có giọng nào.
+function minimaxVoices(cfg) {
+  return cfg.voiceId ? [{ code: cfg.voiceId, label: cfg.voiceLabel || "Giọng clone (Minimax)" }] : [];
+}
+
 const defaults = {
+  // Minimax T2A v2 (giọng đọc thay thế Vbee). Cần API key + Group ID + voice_id (giọng clone).
+  minimax: {
+    apiKey: process.env.MINIMAX_API_KEY || "",
+    groupId: process.env.MINIMAX_GROUP_ID || "",
+    baseUrl: process.env.MINIMAX_BASE_URL || "https://api.minimax.io/v1/t2a_v2",
+    model: process.env.MINIMAX_MODEL || "speech-2.6-hd",
+    voiceId: process.env.MINIMAX_VOICE_ID || "", // giọng clone của bạn
+    voiceLabel: "",
+    speed: Number(process.env.MINIMAX_SPEED || 1.0),
+    vol: Number(process.env.MINIMAX_VOL || 5),
+    pitch: Number(process.env.MINIMAX_PITCH || 0),
+    emotion: process.env.MINIMAX_EMOTION || "neutral", // rỗng = bỏ qua emotion
+    languageBoost: process.env.MINIMAX_LANG_BOOST || "Vietnamese",
+    sampleRate: 44100,
+    bitrate: 128000,
+    format: "mp3", // mp3 để đồng bộ với pipeline (.mp3); có thể đổi wav nếu muốn
+    voices: [],
+  },
   vbee: {
     appId: process.env.VBEE_APP_ID || "",
     token: process.env.VBEE_TOKEN || "",
@@ -62,6 +86,11 @@ function load() {
   try {
     const disk = JSON.parse(fs.readFileSync(FILE, "utf8"));
     return {
+      minimax: (() => {
+        const m = { ...defaults.minimax, ...(disk.minimax || {}) };
+        m.voices = minimaxVoices(m); // luôn suy ra từ voiceId (bỏ mọi giọng mặc định cũ trên đĩa)
+        return m;
+      })(),
       vbee: {
         ...defaults.vbee,
         ...(disk.vbee || {}),
@@ -99,6 +128,40 @@ export function setVbeeVoices(voices) {
   state.vbee.voices = voices;
   persist();
   return state.vbee.voices;
+}
+
+// ---- Minimax (giọng đọc thay thế Vbee) ----
+export function getMinimaxConfig() {
+  return state.minimax;
+}
+export function isMinimaxConfigured() {
+  return Boolean(state.minimax.apiKey && state.minimax.groupId);
+}
+export function setMinimaxConfig(patch) {
+  state.minimax = { ...state.minimax, ...patch };
+  state.minimax.voices = minimaxVoices(state.minimax); // đồng bộ giọng theo voiceId
+  persist();
+  return state.minimax;
+}
+// Bản công khai cho UI (ẩn API key).
+export function publicMinimax() {
+  const m = state.minimax;
+  return {
+    groupId: m.groupId,
+    hasKey: Boolean(m.apiKey),
+    keyLen: (m.apiKey || "").length,
+    baseUrl: m.baseUrl,
+    model: m.model,
+    voiceId: m.voiceId || "",
+    voiceLabel: m.voiceLabel || "",
+    speed: m.speed,
+    vol: m.vol,
+    pitch: m.pitch,
+    emotion: m.emotion,
+    languageBoost: m.languageBoost,
+    voices: m.voices,
+    configured: isMinimaxConfigured(),
+  };
 }
 
 // ---- OpenRouter (sinh nội dung từ chủ đề) ----

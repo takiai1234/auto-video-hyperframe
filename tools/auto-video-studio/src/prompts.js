@@ -103,6 +103,21 @@ Cảnh đầu NÊN là layout "cover" (mở đầu đẹp, rõ) - hoặc "title"
 - definition: kicker, term (thuật ngữ lớn), text (định nghĩa 1-2 câu)   // thuật ngữ + định nghĩa
 - checklist: kicker, heading, items:[{text}]   // danh sách có dấu tick; 2-6 ý ngắn
 - icongrid: kicker, heading, items:[{icon,title}]   // lưới ô icon + nhãn NGẮN; 3-6 ô
+-- LAYOUT "KHOE APP / BRAND / SOCIAL" (concept pack: GIAO DIỆN THẬT + LOGO THẬT) --
+-- Hệ thống TỰ lấy logo từ "brand" (slug) hoặc "domain", và screenshot từ device.shotUrl ở pre-pass. --
+- device: heading, device:{frame:"iphone|ipad|browser", shotUrl:"https://... (tuỳ chọn, hệ thống chụp)", url:"app.local (cho browser)", sideIndex:"03 (tuỳ chọn)", sideLabel:"MINDMAP", accent:"#hex"}   // khoe app/web trong KHUNG MÁY; không có shot -> skeleton
+- social-card: kicker, social:{platform:"x|linkedin|youtube", name, handle:"@...", verified:true|false, bio, cta:"Theo dõi", avatar:"url (tuỳ chọn)", banner:"url (tuỳ chọn)"}   // dựng lại profile MXH, cực viral cho nội dung "người thật"
+- brand-stat: kicker, heading, title (tuỳ chọn), headerIcon (emoji), items:[{brand:"openai (slug Simple Icons)"|domain:"notewave.app", big:"90", unit:"%", sub:"<nhãn ngắn>", accent:"#hex"}]   // so SỐ LIỆU có LOGO brand, số phát sáng theo màu thương hiệu; 1-4 mục
+- product-grid: kicker, heading, items:[{name, desc, price:{in:"$3", out:"$15"}}]   // 2-3 sản phẩm/model
+- app-hero: kicker, brand:"slug (logo làm icon)" HOẶC icon:"emoji", title (tên app), pills:[{l:"Trước", arrow:"→", r:"Sau", tone:"good|bad"}]   // mở màn 1 sản phẩm
+- myth-bust: kicker, heading, myth:{wrong:"<niềm tin sai>", right:"<sự thật>", icon:"emoji"}   // phá niềm tin: ✗ wrong (gạch ngang) -> right
+- claim-card: kicker, tag:"<nhãn vd NGUỒN X>", claim:"<câu trích/khẳng định>", source:"<nguồn>", unverified:true|false   // trích dẫn; unverified hiện nhãn "Chưa kiểm chứng"
+- roadmap-glow: kicker, heading, steps:[{n:1, icon:"emoji", title:"<ngắn>", sub:"<≤4 từ>"}]   // quy trình node đánh số PHÁT SÁNG; 3-6 bước
+- segment-compare: kicker, heading, items:[{icon:"emoji", name:"<phân khúc>", note:"<ghi chú ngắn>", score:0-100}], verdict:"<kết luận tuỳ chọn>"   // so phân khúc + thanh điểm
+- flow-broken: kicker, heading, a:{icon:"emoji", label:"<ngắn>"}, b:{icon:"emoji", label:"<ngắn>"}, broken:true   // giả định GÃY: A --✕--> B
+- icon-row: kicker, heading, items:[{icon:"emoji" hoặc brand:"slug", label:"<ngắn>"}]   // tóm tắt 3-4 ý (có thể kèm logo brand)
+- pricing-row: kicker, heading, cols:["Input","Cached","Output"], rows:[{name:"<tên model>", vals:["$3","$0.3","$15"]}]   // bảng giá in/out
+GỢI Ý "KHOE BRAND": khi nội dung nói về MỘT sản phẩm / MỘT người / MỘT con số CÓ thương hiệu -> ưu tiên "device"/"social-card"/"brand-stat"/"app-hero". Cấp "brand" là slug Simple Icons (vd: openai, github, tiktok, x, youtube, notion, figma, googlechrome) hoặc "domain" (vd: notewave.app) để hệ thống TỰ lấy logo. Có thể thêm "chapter":"<tên chương>" cho BẤT KỲ cảnh nào để hiện nhãn chương ở góc.
 Chữ HIỂN THỊ trên cảnh phải NGẮN (từ khoá/nhãn/số); phần chi tiết để trong "narration" và "caption". Dùng emoji icon hợp ngữ cảnh.
 GỢI Ý DÙNG ẢNH/SƠ ĐỒ: khi chủ đề có đối tượng THẤY ĐƯỢC (địa điểm, sản phẩm, người, thiết bị, hiện tượng) -> nên có 1-3 cảnh "photo"/"split"/"gallery" với "query" TIẾNG ANH cụ thể. Khi có số liệu so sánh -> "bars"; khi có mốc thời gian/diễn tiến -> "timeline". Ưu tiên hình ảnh để video TRỰC QUAN, nhưng "query" phải bám đúng ý đang nói.
 Nội dung & phong cách bám theo yêu cầu phía trên, nhưng ĐẦU RA PHẢI đúng JSON schema này (không kèm gì khác).`;

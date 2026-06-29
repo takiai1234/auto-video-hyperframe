@@ -23,7 +23,7 @@
       </header>
 
       <div id="voice-warn" class="banner" style="display:none">
-        ⚠ Chưa có giọng nào. Mở <b>⚙ Cấu hình</b> (góc trên phải) → mục <b>Vbee</b> để thêm giọng.
+        ⚠ Chưa có giọng nào. Mở <b>⚙ Cấu hình</b> (góc trên phải) → mục <b>Vbee</b> hoặc <b>Minimax</b> để thêm giọng.
       </div>
 
       <!-- Hàng 1: Thêm task + Excel/Drive -->
@@ -36,8 +36,14 @@
           <textarea id="f-content" placeholder="Bật AI: để trống (hoặc nhập dàn ý gợi ý). Tắt AI: dán nội dung, mỗi đoạn = 1 cảnh."></textarea>
           <div class="row2">
             <div>
-              <label>Giọng Vbee</label>
-              <select id="f-vref"></select>
+              <label>Giọng đọc</label>
+              <div class="row-inline" style="gap:6px;">
+                <select id="f-provider" style="flex:0 0 96px;" title="Nhà cung cấp giọng đọc">
+                  <option value="vbee">Vbee</option>
+                  <option value="minimax">Minimax</option>
+                </select>
+                <select id="f-vref" style="flex:1; min-width:0;"></select>
+              </div>
             </div>
             <div>
               <label>Tỷ lệ khung hình</label>
@@ -108,6 +114,7 @@
       <div class="toolbar">
         <div class="left">
           <span style="color: var(--muted); font-size: 12px;">Áp dụng cho tất cả:</span>
+          <select id="bulk-provider" title="Nhà cung cấp giọng"><option value="">- Nguồn giọng -</option><option value="vbee">Vbee</option><option value="minimax">Minimax</option></select>
           <select id="bulk-vref"><option value="">- Giọng -</option></select>
           <select id="bulk-aspect"><option value="">- Tỷ lệ -</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select>
           <select id="bulk-mode"><option value="">- Chế độ -</option><option value="hyperframe">Hyperframe</option><option value="heygen">Hyperframe + HeyGen</option></select>
@@ -162,6 +169,19 @@
         </div>
         <div class="cfg-body">
 
+          <section class="cfg-section" data-keys="dán paste nhanh import cấu hình tự động điền match openrouter vbee minimax heygen drive">
+            <h3>📋 Dán nhanh cấu hình (tự động điền)</h3>
+            <div class="hint" style="margin-top:0;">Bấm <b>Chèn mẫu</b> để có form chuẩn → điền giá trị vào sau dấu <b>:</b> → bấm <b>Tự điền &amp; lưu</b>. Dòng để trống thì giữ nguyên cấu hình cũ. Dùng đúng các nhãn (key) dưới đây để khớp chuẩn nhất.</div>
+            <textarea id="paste-cfg" rows="20" placeholder="Bấm 'Chèn mẫu' để có sẵn form chuẩn, rồi điền giá trị." style="width:100%; font-family:monospace; font-size:13px;"></textarea>
+            <div class="row-inline" style="margin-top: 8px;">
+              <button class="sm ghost" id="btn-paste-template">＋ Chèn mẫu</button>
+              <button class="primary" id="btn-paste-apply">⚡ Tự điền &amp; lưu</button>
+              <label class="checkbox"><input type="checkbox" id="paste-sync-music" checked /> đồng bộ nhạc Google Drive luôn</label>
+              <span id="paste-status" class="hint" style="margin:0;"></span>
+            </div>
+            <div id="paste-result" class="hint" style="margin-top:6px; white-space:pre-line;"></div>
+          </section>
+
           <section class="cfg-section" data-keys="openrouter chatgpt ai sinh nội dung api key model gpt prompt kịch bản sonnet opus claude 4.1 mini">
             <h3>🤖 OpenRouter (sinh nội dung AI)</h3>
             <div class="row-inline">
@@ -189,29 +209,76 @@
             </details>
           </section>
 
-          <section class="cfg-section" data-keys="vbee giọng đọc tts api key app id token voice base url âm thanh">
-            <h3>🎙️ Vbee (giọng đọc tiếng Việt)</h3>
-            <div class="row2">
-              <div><label>App ID</label><input type="text" id="vb-app" placeholder="app_id" /></div>
-              <div><label>Access Token</label><input type="password" id="vb-token" placeholder="để trống nếu không đổi" /></div>
-            </div>
-            <label>Base URL</label>
-            <input type="text" id="vb-base" placeholder="https://vbee.vn/api/v1/tts" />
-            <div class="row-inline" style="margin-top: 10px;">
-              <button class="primary" id="btn-vb-save">Lưu cấu hình</button>
-              <span id="vb-status" class="hint" style="margin:0;"></span>
+          <section class="cfg-section" data-keys="vbee minimax giọng đọc tts api key app id token group id voice id model speed emotion base url âm thanh">
+            <h3>🎙️ Giọng đọc</h3>
+            <div class="row-inline" id="voice-tabs" style="gap:6px;">
+              <button type="button" class="sm" id="voice-tab-vbee" data-prov="vbee">Vbee</button>
+              <button type="button" class="sm ghost" id="voice-tab-minimax" data-prov="minimax">Minimax</button>
+              <span id="voice-tab-hint" class="hint" style="margin:0 0 0 8px;"></span>
             </div>
             <div class="divider"></div>
-            <label>Danh sách giọng Vbee (voice_code → tên hiển thị)</label>
-            <div id="vb-voices" class="taglist"></div>
-            <div class="row-inline" style="margin-top: 8px;">
-              <input type="text" id="vb-new-code" placeholder="voice_code (vd hn_male_..._48k-fhg)" style="flex:2; min-width:160px;" />
-              <input type="text" id="vb-new-label" placeholder="tên hiển thị" style="flex:1; min-width:120px;" />
-              <button class="sm" id="btn-vb-addvoice">＋</button>
+
+            <!-- Panel Vbee -->
+            <div id="voice-panel-vbee" class="voice-panel">
+              <div class="row2">
+                <div><label>App ID</label><input type="text" id="vb-app" placeholder="app_id" /></div>
+                <div><label>Access Token</label><input type="password" id="vb-token" placeholder="để trống nếu không đổi" /></div>
+              </div>
+              <label>Base URL</label>
+              <input type="text" id="vb-base" placeholder="https://vbee.vn/api/v1/tts" />
+              <div class="row-inline" style="margin-top: 10px;">
+                <button class="primary" id="btn-vb-save">Lưu cấu hình</button>
+                <span id="vb-status" class="hint" style="margin:0;"></span>
+              </div>
+              <div class="divider"></div>
+              <label>Danh sách giọng Vbee (voice_code → tên hiển thị)</label>
+              <div id="vb-voices" class="taglist"></div>
+              <div class="row-inline" style="margin-top: 8px;">
+                <input type="text" id="vb-new-code" placeholder="voice_code (vd hn_male_..._48k-fhg)" style="flex:2; min-width:160px;" />
+                <input type="text" id="vb-new-label" placeholder="tên hiển thị" style="flex:1; min-width:120px;" />
+                <button class="sm" id="btn-vb-addvoice">＋</button>
+              </div>
+              <div class="row-inline" style="margin-top: 10px;">
+                <select id="vb-test-voice" style="flex:1;"></select>
+                <button class="sm" id="btn-vb-test">Test giọng Vbee</button>
+              </div>
             </div>
-            <div class="row-inline" style="margin-top: 10px;">
-              <select id="vb-test-voice" style="flex:1;"></select>
-              <button class="sm" id="btn-vb-test">Test giọng Vbee</button>
+
+            <!-- Panel Minimax -->
+            <div id="voice-panel-minimax" class="voice-panel" style="display:none;">
+              <div class="row2">
+                <div><label>API Key</label><input type="password" id="mm-key" placeholder="để trống nếu không đổi" /></div>
+                <div><label>Group ID</label><input type="text" id="mm-group" placeholder="GroupId" /></div>
+              </div>
+              <div class="row2" style="margin-top:8px;">
+                <div><label>Model</label><input type="text" id="mm-model" placeholder="speech-2.6-hd" /></div>
+                <div><label>Tốc độ (speed)</label><input type="number" id="mm-speed" step="0.1" min="0.5" max="2" placeholder="1.0" /></div>
+              </div>
+              <div class="row2" style="margin-top:8px;">
+                <div><label>Cảm xúc (emotion)</label>
+                  <select id="mm-emotion">
+                    <option value="">(không)</option>
+                    <option value="neutral">neutral (trung tính)</option>
+                    <option value="happy">happy (vui)</option>
+                    <option value="sad">sad (buồn)</option>
+                    <option value="angry">angry (giận)</option>
+                    <option value="fearful">fearful (sợ)</option>
+                    <option value="disgusted">disgusted (ghê)</option>
+                    <option value="surprised">surprised (bất ngờ)</option>
+                  </select>
+                </div>
+                <div><label>Base URL</label><input type="text" id="mm-base" placeholder="https://api.minimax.io/v1/t2a_v2" /></div>
+              </div>
+              <div class="row2" style="margin-top:8px;">
+                <div><label>Voice ID (giọng clone)</label><input type="text" id="mm-voice-id" placeholder="vd: n_hanoi_male_clone... hoặc voice clone của bạn" /></div>
+                <div><label>Tên hiển thị <span style="color:var(--muted)">(tuỳ chọn)</span></label><input type="text" id="mm-voice-label" placeholder="vd: Giọng clone của tôi" /></div>
+              </div>
+              <div class="row-inline" style="margin-top: 10px;">
+                <button class="primary" id="btn-mm-save">Lưu cấu hình</button>
+                <button class="sm" id="btn-mm-test">Test giọng Minimax</button>
+                <span id="mm-status" class="hint" style="margin:0;"></span>
+              </div>
+              <div class="hint">Endpoint <b>t2a_v2</b>: cần API Key + Group ID + Voice ID (giọng clone của bạn). Test dùng đúng Voice ID đang nhập (Lưu trước cho chắc).</div>
             </div>
           </section>
 

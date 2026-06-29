@@ -315,15 +315,18 @@ export const ENTRANCES = [
   "default", "snappy", "dreamy", "bouncy", "gentle",
   "smooth", "techno", "precise", "soft", "mechanical",
 ];
-export const MEDIA = ["mixed", "image", "diagram", "stat", "text"];
+// "brand" = phong cách KHOE APP/BRAND/SOCIAL (concept pack) - đẩy mạnh device/social-card/brand-stat.
+export const MEDIA = ["mixed", "image", "diagram", "stat", "text", "brand"];
 
 const MEDIA_PREFER = {
-  // "image" giờ ƯU TIÊN dẫn chứng dựng bằng HTML (code/browser) hơn ảnh stock.
-  image: ["code", "browser", "split", "photo", "cards", "icongrid"],
-  diagram: ["flow", "loop", "steps", "bars", "timeline", "roadmap", "compare", "pros", "formula", "gauge"],
-  stat: ["stat", "bignum", "kpi", "bars", "gauge", "cards"],
-  text: ["statement", "quote", "definition", "checklist", "browser", "cards", "section"],
-  mixed: ["cards", "icongrid", "code", "stat", "flow", "browser", "checklist", "quote"],
+  // "image" giờ ƯU TIÊN dẫn chứng dựng bằng HTML (code/browser/device) hơn ảnh stock.
+  image: ["device", "code", "browser", "social-card", "split", "cards", "icongrid"],
+  diagram: ["flow", "loop", "steps", "roadmap-glow", "segment-compare", "flow-broken", "bars", "timeline", "compare", "pros"],
+  stat: ["brand-stat", "stat", "bignum", "kpi", "pricing-row", "bars", "gauge"],
+  text: ["statement", "quote", "myth-bust", "claim-card", "definition", "checklist", "cards"],
+  // KHOE BRAND: giao diện thật + logo thật + stat phát sáng (cần chủ đề có sản phẩm/người/số có brand).
+  brand: ["device", "social-card", "brand-stat", "app-hero", "icon-row", "pricing-row", "claim-card"],
+  mixed: ["device", "brand-stat", "cards", "icon-row", "myth-bust", "code", "stat", "social-card"],
 };
 
 function pick(arr) {

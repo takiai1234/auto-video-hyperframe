@@ -111,6 +111,7 @@ export function addTask({
   content,
   approved,
   voiceRef,
+  voiceProvider,
   music,
   autogen,
   aspectRatio,
@@ -127,6 +128,7 @@ export function addTask({
     approved: normalizeApproved(approved),
     autogen: typeof autogen === "boolean" ? autogen : !c, // chỉ có chủ đề -> tự sinh nội dung AI
     voiceRef: voiceRef || "",
+    voiceProvider: voiceProvider === "minimax" ? "minimax" : "vbee", // nhà cung cấp giọng đọc
     music: music || "random",
     aspectRatio: aspectRatio || "16:9",
     mode: mode === "heygen" ? "heygen" : "hyperframe", // hyperframe | heygen (ghép avatar)
@@ -235,6 +237,7 @@ async function runTask(t) {
         content: t.content,
         autogen: t.autogen,
         voiceRef: t.voiceRef,
+        voiceProvider: t.voiceProvider,
         music: t.music,
         aspectRatio: t.aspectRatio,
         mode: t.mode,

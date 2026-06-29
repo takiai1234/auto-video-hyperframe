@@ -12,8 +12,10 @@ const MEDIA_GUIDE = {
     'Mẫu này THIÊN VỀ HÌNH ẢNH/DẪN CHỨNG TRỰC QUAN. ƯU TIÊN dựng "ảnh thực tế" SÁT nội dung bằng HTML: layout "code" (đoạn mã/câu lệnh), "browser" (mockup trang web/bài báo: đặt url + heading + text + tag callout). CHỈ dùng "photo" (kèm "query" tiếng Anh) tối đa 1-2 cảnh khi chủ đề có vật thể thật cần thấy. HẠN CHẾ gallery/ảnh stock chung chung.',
   diagram:
     "Mẫu này THIÊN VỀ SƠ ĐỒ: trực quan hoá bằng flow/loop/steps/bars/timeline/roadmap/compare/pros/formula; tối thiểu 3 cảnh là sơ đồ; hạn chế cảnh chỉ-chữ.",
-  stat: "Mẫu này NHẤN MẠNH SỐ LIỆU: dùng nhiều stat/bars, mỗi con số có ngữ cảnh rõ.",
+  stat: "Mẫu này NHẤN MẠNH SỐ LIỆU: dùng nhiều stat/bars, mỗi con số có ngữ cảnh rõ. Nếu con số gắn với thương hiệu (vd kết quả của OpenAI/GitHub...) thì dùng \"brand-stat\" và cấp \"brand\" (slug) hoặc \"domain\" để hiện LOGO.",
   text: "Mẫu này CÔ ĐỌNG, MẠNH VỀ CHỮ: ưu tiên statement/quote/cards với câu chốt sắc; hạn chế ảnh.",
+  brand:
+    'Mẫu này KHOE GIAO DIỆN/THƯƠNG HIỆU THẬT (kiểu Reels). ƯU TIÊN: "device" (khoe app/web trong khung iphone/ipad/browser, cấp "device.shotUrl" nếu có URL), "social-card" (dựng lại profile MXH của 1 người/kênh thật), "brand-stat" (số liệu CÓ logo brand), "app-hero" (mở màn 1 sản phẩm). LUÔN cấp "brand" (slug Simple Icons: openai, github, tiktok, figma, notion...) hoặc "domain" (vd notewave.app) cho các mục cần logo, để pipeline TỰ lấy logo thật. Chỉ dùng khi chủ đề có sản phẩm/người/thương hiệu CỤ THỂ; nếu quá trừu tượng thì quay về số liệu + chữ.',
   mixed:
     'Mẫu này CÂN BẰNG: đa dạng layout, có cả chữ, sơ đồ và 1-2 ảnh thật (kèm "query" tiếng Anh).',
 };

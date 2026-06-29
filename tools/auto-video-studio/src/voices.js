@@ -1,28 +1,33 @@
-// Bộ điều phối giọng đọc - dùng Vbee API.
+// Bộ điều phối giọng đọc - chọn nhà cung cấp theo voiceSpec.provider (Vbee | Minimax).
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { synthesizeVbee } from "./vbee.js";
+import { synthesizeMinimax } from "./minimax.js";
 import { FFPROBE, FFMPEG } from "./bin.js";
 
 const execFileAsync = promisify(execFile);
 
-// voiceSpec = { ref: voiceCode }
-// outBase: đường dẫn KHÔNG kèm đuôi. Trả về đường dẫn file thật.
+// voiceSpec = { ref: voiceCode|voice_id, provider: "vbee"|"minimax" }
+// outBase: đường dẫn KHÔNG kèm đuôi. Trả về đường dẫn file thật (.mp3 cho cả 2 provider).
 export async function synthesize(text, voiceSpec, outBase) {
   const clean = String(text || "").trim();
   if (!clean) throw new Error("Văn bản rỗng.");
   const out = `${outBase}.mp3`;
-  await synthesizeVbee(clean, voiceSpec?.ref, out);
+  if ((voiceSpec?.provider || "vbee") === "minimax") {
+    await synthesizeMinimax(clean, voiceSpec?.ref, out);
+  } else {
+    await synthesizeVbee(clean, voiceSpec?.ref, out);
+  }
   return out;
 }
 
-// Như synthesize nhưng trả thêm URL audio công khai (Vbee) để HeyGen dùng.
-// Trả { path, url }.
+// Như synthesize nhưng trả thêm URL audio công khai để HeyGen dùng. Trả { path, url }.
 export async function synthesizeWithUrl(text, voiceSpec, outBase) {
   const clean = String(text || "").trim();
   if (!clean) throw new Error("Văn bản rỗng.");
   const out = `${outBase}.mp3`;
-  const { audioUrl } = await synthesizeVbee(clean, voiceSpec?.ref, out);
+  const fn = (voiceSpec?.provider || "vbee") === "minimax" ? synthesizeMinimax : synthesizeVbee;
+  const { audioUrl } = await fn(clean, voiceSpec?.ref, out);
   return { path: out, url: audioUrl };
 }
 
